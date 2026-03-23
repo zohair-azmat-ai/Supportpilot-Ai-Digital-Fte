@@ -1,0 +1,30 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+sqlalchemy[asyncio]==2.0.35
+alembic==1.13.2
+asyncpg==0.29.0
+pydantic==2.9.2
+pydantic-settings==2.5.2
+python-jose[cryptography]==3.3.0
+bcrypt==4.2.1
+python-multipart==0.0.12
+openai==1.50.2
+python-dotenv==1.0.1
+httpx==0.27.2
+
+# ── Gmail integration ────────────────────────────────────────────────────────
+# Required when GMAIL_ENABLED=true
+google-api-python-client==2.151.0
+google-auth-httplib2==0.2.0
+google-auth-oauthlib==1.2.1
+
+# ── WhatsApp / Twilio integration ────────────────────────────────────────────
+# Required when TWILIO_ENABLED=true
+twilio==9.3.8
+
+# ── Kafka (production only — not required for local dev when USE_KAFKA=false) ─
+aiokafka==0.11.0
+
+# ── Load testing (dev / CI only — not required for production) ───────────────
+# Install separately: pip install locust
+# locust==2.32.0

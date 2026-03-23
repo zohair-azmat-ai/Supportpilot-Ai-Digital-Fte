@@ -1,0 +1,267 @@
+"""Support form service — event-driven pipeline with dual-mode execution."""
+
+from __future__ import annotations
+
+import logging
+import secrets
+import time
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.ai.agent import support_agent
+from app.core.config import settings
+from app.repositories.conversation import ConversationRepository
+from app.repositories.message import MessageRepository
+from app.repositories.ticket import TicketRepository
+from app.repositories.user import UserRepository
+from app.schemas.support import SupportFormRequest, SupportSubmitResponse
+from app.services.channel_identity import channel_identity_service
+
+logger = logging.getLogger(__name__)
+
+
+class SupportService:
+    """
+    Handles the public support form end-to-end.
+
+    Execution modes
+    ---------------
+    USE_KAFKA=false (default / local dev):
+        Processes everything inline synchronously. AI agent runs, ticket is
+        created, and the response is returned in the same HTTP response.
+        Behavior is identical to the previous direct-call implementation.
+
+    USE_KAFKA=true (production):
+        Publishes a SupportFormEvent to the event bus (Kafka topic:
+        webform_inbound). Returns a 202-style confirmation immediately.
+        The MessageProcessorWorker picks up the event and runs the pipeline
+        asynchronously. The customer's response is delivered via the channel
+        adapter (web: stored in DB, accessible via /conversations endpoint).
+    """
+
+    async def submit_support_form(
+        self,
+        db: AsyncSession,
+        data: SupportFormRequest,
+    ) -> SupportSubmitResponse:
+        """Process a web support form submission.
+
+        Args:
+            db: Active database session.
+            data: Validated support form payload.
+
+        Returns:
+            SupportSubmitResponse with conversation_id, ticket_id, and AI reply.
+        """
+        if settings.USE_KAFKA:
+            return await self._submit_async(db, data)
+        return await self._submit_inline(db, data)
+
+    # ------------------------------------------------------------------
+    # Inline path (USE_KAFKA=false)
+    # ------------------------------------------------------------------
+
+    async def _submit_inline(
+        self,
+        db: AsyncSession,
+        data: SupportFormRequest,
+    ) -> SupportSubmitResponse:
+        """Synchronous inline processing — no Kafka required."""
+        # 1. Resolve/create user + Customer + CustomerIdentifier (web channel)
+        user = await channel_identity_service.resolve_or_create(
+            db=db,
+            channel="web",
+            identifier_value=data.email,
+            display_name=data.name,
+        )
+
+        # 2. Create conversation
+        conv_repo = ConversationRepository(db)
+        conversation = await conv_repo.create({
+            "user_id": user.id,
+            "channel": "web",
+            "subject": data.subject,
+            "status": "active",
+        })
+
+        msg_repo = MessageRepository(db)
+
+        # 3. Persist user message
+        await msg_repo.create_message(
+            conversation_id=conversation.id,
+            sender_type="user",
+            content=data.message,
+        )
+
+        # 4. Run AI agent (full tool workflow: history → KB → ticket → respond)
+        t0 = time.monotonic()
+        ai_result = await support_agent.run(
+            db=db,
+            user_id=user.id,
+            conversation_id=conversation.id,
+            user_message=data.message,
+            conversation_history=[],
+        )
+        response_ms = (time.monotonic() - t0) * 1000
+
+        # 5. Persist AI reply
+        await msg_repo.create_message(
+            conversation_id=conversation.id,
+            sender_type="ai",
+            content=ai_result.response,
+            intent=ai_result.intent,
+            ai_confidence=ai_result.confidence,
+            metadata=(
+                {
+                    "should_escalate": ai_result.should_escalate,
+                    "escalation_reason": ai_result.escalation_reason,
+                }
+                if ai_result.should_escalate
+                else None
+            ),
+        )
+
+        if ai_result.should_escalate:
+            await conv_repo.update(conversation.id, {"status": "escalated"})
+
+        # 6. Auto-create ticket (agent may also create one via tool; this is
+        #    a fallback to ensure a ticket always exists after form submission)
+        ticket_repo = TicketRepository(db)
+        existing_tickets = await ticket_repo.get_by_user(user.id, skip=0, limit=1)
+        conv_tickets = [t for t in existing_tickets if t.conversation_id == conversation.id]
+
+        if conv_tickets:
+            ticket = conv_tickets[0]
+        else:
+            ticket = await ticket_repo.create({
+                "user_id": user.id,
+                "conversation_id": conversation.id,
+                "title": data.subject,
+                "description": data.message,
+                "category": data.category,
+                "priority": data.priority,
+            })
+
+        # 7. Record metrics (non-blocking)
+        try:
+            from app.repositories.agent_metrics import AgentMetricsRepository
+            metrics_repo = AgentMetricsRepository(db)
+            await metrics_repo.record({
+                "conversation_id": conversation.id,
+                "user_id": user.id,
+                "channel": "web",
+                "intent_detected": ai_result.intent,
+                "confidence_score": ai_result.confidence,
+                "tools_called": ai_result.tools_called,
+                "iterations": ai_result.iterations,
+                "response_time_ms": response_ms,
+                "model_used": settings.OPENAI_MODEL,
+                "was_escalated": ai_result.should_escalate,
+                "escalation_reason": ai_result.escalation_reason,
+                "ticket_created": ai_result.ticket_created,
+                "kb_articles_found": ai_result.kb_articles_found,
+            })
+        except Exception as exc:
+            logger.warning("Failed to record metrics: %s", exc)
+
+        confirmation = (
+            f"Thank you for contacting SupportPilot, {data.name}. "
+            f"Your request has been received and a ticket (#{ticket.id[:8].upper()}) "
+            "has been created. Our team will follow up with you shortly."
+        )
+
+        return SupportSubmitResponse(
+            conversation_id=conversation.id,
+            ticket_id=ticket.id,
+            confirmation_message=confirmation,
+            ai_response=ai_result.response,
+        )
+
+    # ------------------------------------------------------------------
+    # Async Kafka path (USE_KAFKA=true)
+    # ------------------------------------------------------------------
+
+    async def _submit_async(
+        self,
+        db: AsyncSession,
+        data: SupportFormRequest,
+    ) -> SupportSubmitResponse:
+        """
+        Publish form event to Kafka; worker processes asynchronously.
+
+        In this mode:
+        - A placeholder conversation and ticket are created immediately
+          so the caller has IDs to reference.
+        - The event is published to the webform_inbound topic.
+        - The MessageProcessorWorker picks it up and runs the AI pipeline.
+        - The AI response is stored in the conversation when ready.
+        """
+        import uuid as _uuid
+        from app.events.bus import get_event_bus
+        from app.events.schemas import SupportFormEvent, make_event
+        from app.events.topics import Topic
+
+        user = await channel_identity_service.resolve_or_create(
+            db=db,
+            channel="web",
+            identifier_value=data.email,
+            display_name=data.name,
+        )
+
+        # Create placeholder conversation
+        conv_repo = ConversationRepository(db)
+        conversation = await conv_repo.create({
+            "user_id": user.id,
+            "channel": "web",
+            "subject": data.subject,
+            "status": "active",
+        })
+
+        # Create placeholder ticket immediately so caller has a reference
+        ticket_repo = TicketRepository(db)
+        ticket = await ticket_repo.create({
+            "user_id": user.id,
+            "conversation_id": conversation.id,
+            "title": data.subject,
+            "description": data.message,
+            "category": data.category,
+            "priority": data.priority,
+        })
+
+        # Publish to event bus (Kafka in production)
+        event = make_event(
+            SupportFormEvent,
+            channel="web",
+            name=data.name,
+            email=data.email,
+            subject=data.subject,
+            message=data.message,
+            category=data.category,
+            priority=data.priority,
+        )
+
+        bus = get_event_bus()
+        await bus.publish(Topic.WEBFORM_INBOUND, event)
+
+        logger.info(
+            "SupportFormEvent queued | event_id=%s conversation_id=%s",
+            event.event_id,
+            conversation.id,
+        )
+
+        return SupportSubmitResponse(
+            conversation_id=conversation.id,
+            ticket_id=ticket.id,
+            confirmation_message=(
+                f"Thank you, {data.name}. Your request has been received "
+                f"(ticket #{ticket.id[:8].upper()}). "
+                "Our AI agent is processing your request and will respond shortly."
+            ),
+            ai_response=(
+                "Your request has been queued and will be processed by our AI agent. "
+                "You will receive a response in your conversation thread shortly."
+            ),
+        )
+
+
+support_service = SupportService()

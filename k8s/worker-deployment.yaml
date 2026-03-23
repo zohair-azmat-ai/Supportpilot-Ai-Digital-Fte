@@ -1,0 +1,69 @@
+# NOTE: Workers consume from Kafka topics and do not expose an HTTP endpoint,
+# so no readinessProbe or livenessProbe is defined here.
+#
+# NOTE: Workers scale based on Kafka consumer lag. KEDA (Kubernetes Event-Driven
+# Autoscaler) is recommended — add a ScaledObject targeting this Deployment with
+# the kafkaTopic and consumerGroup triggers. Manual scaling: kubectl scale
+# deployment/supportpilot-worker --replicas=<N> -n supportpilot
+#
+# NOTE: Before deploying:
+#   1. Replace 'your-registry/supportpilot-api:latest' with your real image URI.
+#   2. Ensure 'supportpilot-secrets' Secret is present (same as API deployment).
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: supportpilot-worker
+  namespace: supportpilot
+  labels:
+    app: supportpilot-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: supportpilot-worker
+  template:
+    metadata:
+      labels:
+        app: supportpilot-worker
+    spec:
+      containers:
+        - name: worker
+          # NOTE: Same image as the API — different entrypoint launches the worker.
+          # Replace with your real container registry URI and pinned tag.
+          image: your-registry/supportpilot-api:latest
+          command:
+            - python
+            - -m
+            - workers.main
+          envFrom:
+            - configMapRef:
+                name: supportpilot-config
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: supportpilot-secrets
+                  key: DATABASE_URL
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: supportpilot-secrets
+                  key: SECRET_KEY
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: supportpilot-secrets
+                  key: OPENAI_API_KEY
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                secretKeyRef:
+                  name: supportpilot-secrets
+                  key: KAFKA_BOOTSTRAP_SERVERS
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "384Mi"
+            limits:
+              cpu: "1000m"
+              memory: "768Mi"

@@ -1,0 +1,90 @@
+# NOTE: Before deploying to production:
+#   1. Replace 'your-registry/supportpilot-api:latest' with your actual
+#      container registry image URI and a pinned tag (never use :latest in prod).
+#   2. Ensure the Secret 'supportpilot-secrets' exists in the 'supportpilot'
+#      namespace with the keys: DATABASE_URL, SECRET_KEY, OPENAI_API_KEY,
+#      KAFKA_BOOTSTRAP_SERVERS.
+#   3. Adjust replica count and resource limits to match your cluster capacity.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: supportpilot-api
+  namespace: supportpilot
+  labels:
+    app: supportpilot-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: supportpilot-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: supportpilot-api
+    spec:
+      containers:
+        - name: api
+          # NOTE: Replace with your real container registry URI and pinned tag.
+          image: your-registry/supportpilot-api:latest
+          ports:
+            - containerPort: 8000
+          command:
+            - uvicorn
+            - main:app
+            - --host
+            - "0.0.0.0"
+            - --port
+            - "8000"
+            - --workers
+            - "2"
+          envFrom:
+            - configMapRef:
+                name: supportpilot-config
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: supportpilot-secrets
+                  key: DATABASE_URL
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: supportpilot-secrets
+                  key: SECRET_KEY
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: supportpilot-secrets
+                  key: OPENAI_API_KEY
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                secretKeyRef:
+                  name: supportpilot-secrets
+                  key: KAFKA_BOOTSTRAP_SERVERS
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 3

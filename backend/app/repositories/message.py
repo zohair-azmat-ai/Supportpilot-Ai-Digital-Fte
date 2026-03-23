@@ -1,0 +1,58 @@
+"""Message repository."""
+
+from __future__ import annotations
+
+from typing import List, Optional
+
+from sqlalchemy import select
+
+from app.models.message import Message
+from app.repositories.base import BaseRepository
+
+
+class MessageRepository(BaseRepository[Message]):
+    """Data access layer for the Message model."""
+
+    model = Message
+
+    async def get_by_conversation(self, conversation_id: str) -> List[Message]:
+        """Return all messages in a conversation ordered chronologically."""
+        result = await self.db.execute(
+            select(Message)
+            .where(Message.conversation_id == conversation_id)
+            .order_by(Message.created_at.asc())
+        )
+        return list(result.scalars().all())
+
+    async def create_message(
+        self,
+        conversation_id: str,
+        sender_type: str,
+        content: str,
+        intent: Optional[str] = None,
+        ai_confidence: Optional[float] = None,
+        metadata: Optional[dict] = None,
+    ) -> Message:
+        """Create and persist a new message.
+
+        Args:
+            conversation_id: Parent conversation ID.
+            sender_type: One of 'user', 'ai', or 'agent'.
+            content: Message text content.
+            intent: Detected intent label (AI messages only).
+            ai_confidence: Confidence score 0-1 (AI messages only).
+            metadata: Optional extra JSON payload.
+
+        Returns:
+            The persisted Message instance.
+        """
+        return await self.create(
+            {
+                "conversation_id": conversation_id,
+                "sender_type": sender_type,
+                "content": content,
+                "intent": intent,
+                "ai_confidence": ai_confidence,
+                "metadata_": metadata,
+            }
+        )

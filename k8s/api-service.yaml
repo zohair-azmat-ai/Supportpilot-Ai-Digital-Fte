@@ -1,0 +1,20 @@
+# NOTE: This is a ClusterIP service — the API is only reachable from within
+# the cluster. To expose externally, add an Ingress resource or change the
+# type to LoadBalancer (not recommended for production without proper TLS).
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: supportpilot-api-service
+  namespace: supportpilot
+  labels:
+    app: supportpilot-api
+spec:
+  type: ClusterIP
+  selector:
+    app: supportpilot-api
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 8000
