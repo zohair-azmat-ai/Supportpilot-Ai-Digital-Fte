@@ -52,7 +52,7 @@ class TicketResponse(BaseModel):
     """Public representation of a ticket."""
 
     id: str
-    user_id: str
+    user_id: Optional[str] = None
     conversation_id: Optional[str] = None
     title: str
     description: str

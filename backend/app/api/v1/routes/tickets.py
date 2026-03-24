@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from typing import List
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_active_user, get_db
+
+logger = logging.getLogger(__name__)
 from app.schemas.ticket import (
     CreateTicketRequest,
     TicketResponse,
@@ -33,7 +36,11 @@ async def list_tickets(
     tickets = await ticket_service.get_user_tickets(
         db, current_user.id, skip=skip, limit=limit
     )
-    return [TicketResponse.model_validate(t) for t in tickets]
+    try:
+        return [TicketResponse.model_validate(t) for t in tickets]
+    except Exception:
+        logger.exception("list_tickets: serialization error for user=%s", current_user.id)
+        raise HTTPException(status_code=500, detail="Failed to serialize tickets")
 
 
 @router.post(

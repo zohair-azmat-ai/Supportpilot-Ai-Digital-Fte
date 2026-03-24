@@ -366,6 +366,22 @@ _PATCHES = [
         ADD COLUMN IF NOT EXISTS similar_issue_detected BOOLEAN DEFAULT false
     """,
 
+    # was_escalated / ticket_created / kb_articles_found — core agent outcome fields
+    # These were added to the model after the initial table creation.
+    # DEFAULT values ensure existing rows are backfilled with safe values.
+    """
+    ALTER TABLE agent_metrics
+        ADD COLUMN IF NOT EXISTS was_escalated BOOLEAN DEFAULT false
+    """,
+    """
+    ALTER TABLE agent_metrics
+        ADD COLUMN IF NOT EXISTS ticket_created BOOLEAN DEFAULT false
+    """,
+    """
+    ALTER TABLE agent_metrics
+        ADD COLUMN IF NOT EXISTS kb_articles_found INTEGER DEFAULT 0
+    """,
+
     # =========================================================================
     # conversations — channel-specific threading / session key
     # =========================================================================

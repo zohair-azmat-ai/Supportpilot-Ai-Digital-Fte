@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from typing import List
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+
+logger = logging.getLogger(__name__)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_active_user, get_db
@@ -42,7 +45,11 @@ async def list_conversations(
         convs = await conversation_service.get_user_conversations(
             db, current_user.id, skip=skip, limit=limit
         )
-    return [ConversationResponse.model_validate(c) for c in convs]
+    try:
+        return [ConversationResponse.model_validate(c) for c in convs]
+    except Exception:
+        logger.exception("list_conversations: serialization error for user=%s", current_user.id)
+        raise HTTPException(status_code=500, detail="Failed to serialize conversations")
 
 
 @router.post(

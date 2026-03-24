@@ -29,9 +29,9 @@ class ConversationResponse(BaseModel):
     """Public representation of a conversation (without messages)."""
 
     id: str
-    user_id: str
-    channel: str
-    status: str
+    user_id: Optional[str] = None
+    channel: str = "web"
+    status: str = "active"
     subject: Optional[str] = None
     created_at: datetime
     updated_at: datetime
