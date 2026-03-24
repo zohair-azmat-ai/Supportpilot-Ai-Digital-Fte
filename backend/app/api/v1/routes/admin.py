@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db, require_admin
+
+logger = logging.getLogger(__name__)
 from app.repositories.conversation import ConversationRepository
 from app.repositories.user import UserRepository
 from app.repositories.ticket import TicketRepository
@@ -34,12 +37,19 @@ async def get_stats(
     ticket_repo = TicketRepository(db)
     conv_repo = ConversationRepository(db)
 
-    total_users = await user_repo.count_users()
-    total_tickets = await ticket_repo.count_total()
-    open_tickets = await ticket_repo.count_by_status("open")
-    total_conversations = await conv_repo.count_total()
-    active_conversations = await conv_repo.count_active()
-    resolved_today = await ticket_repo.count_resolved_today()
+    try:
+        total_users = await user_repo.count_users()
+        total_tickets = await ticket_repo.count_total()
+        open_tickets = await ticket_repo.count_by_status("open")
+        total_conversations = await conv_repo.count_total()
+        active_conversations = await conv_repo.count_active()
+        resolved_today = await ticket_repo.count_resolved_today()
+    except Exception as exc:
+        logger.error("Failed to fetch admin stats: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Stats temporarily unavailable. Please try again.",
+        ) from exc
 
     return AdminStatsResponse(
         total_users=total_users,

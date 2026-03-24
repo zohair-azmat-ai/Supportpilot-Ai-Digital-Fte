@@ -49,14 +49,14 @@ class ConversationRepository(BaseRepository[Conversation]):
             .select_from(Conversation)
             .where(Conversation.status == "active")
         )
-        return result.scalar_one()
+        return result.scalar_one_or_none() or 0
 
     async def count_total(self) -> int:
         """Return the total number of conversations."""
         result = await self.db.execute(
             select(func.count()).select_from(Conversation)
         )
-        return result.scalar_one()
+        return result.scalar_one_or_none() or 0
 
     async def get_all_paginated(
         self,

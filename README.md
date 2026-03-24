@@ -11,9 +11,26 @@
 
 **A production-grade Digital FTE (AI Full-Time Employee) — an always-on, tool-based AI agent that handles customer support 24/7 with event-driven architecture, structured reasoning, and CRM-grade data persistence.**
 
-[API Docs](#api-overview) · [Documentation](#documentation) · [Report Bug](../../issues)
+[Live Demo](#live-demo) · [API Docs](#api-overview) · [Documentation](#documentation) · [Report Bug](../../issues)
 
 </div>
+
+---
+
+## Live Demo
+
+| | URL |
+|---|---|
+| **Frontend** | [supportpilot-ai-digital-fte.vercel.app](https://supportpilot-ai-digital-fte.vercel.app) |
+| **Backend API** | [zohairazmat-supportpilot-ai-fte.hf.space](https://zohairazmat-supportpilot-ai-fte.hf.space) |
+| **Interactive API Docs** | [zohairazmat-supportpilot-ai-fte.hf.space/docs](https://zohairazmat-supportpilot-ai-fte.hf.space/docs) |
+
+**Deployed on:** Vercel (Next.js frontend) · Hugging Face Spaces (FastAPI backend) · Neon (PostgreSQL)
+
+**Demo credentials:**
+- Admin: `admin@supportpilot.ai` / `Admin123!`
+
+> **Note:** The backend runs on Hugging Face Spaces free tier — it may take 30–60 seconds to wake up on first request.
 
 ---
 
@@ -30,6 +47,7 @@ The platform is built as a **single production-style monorepo** combining a Next
 
 ## Table of Contents
 
+- [Live Demo](#live-demo)
 - [Features](#features)
 - [Tech Stack](#tech-stack)
 - [Architecture](#architecture)

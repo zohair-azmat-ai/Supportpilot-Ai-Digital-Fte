@@ -36,4 +36,4 @@ class UserRepository(BaseRepository[User]):
     async def count_users(self) -> int:
         """Return the total count of registered users."""
         result = await self.db.execute(select(func.count()).select_from(User))
-        return result.scalar_one()
+        return result.scalar_one_or_none() or 0

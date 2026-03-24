@@ -55,14 +55,14 @@ class TicketRepository(BaseRepository[Ticket]):
             .select_from(Ticket)
             .where(Ticket.status == status)
         )
-        return result.scalar_one()
+        return result.scalar_one_or_none() or 0
 
     async def count_total(self) -> int:
         """Return the total number of tickets."""
         result = await self.db.execute(
             select(func.count()).select_from(Ticket)
         )
-        return result.scalar_one()
+        return result.scalar_one_or_none() or 0
 
     async def count_resolved_today(self) -> int:
         """Return the number of tickets resolved today (UTC)."""
@@ -73,9 +73,10 @@ class TicketRepository(BaseRepository[Ticket]):
             select(func.count())
             .select_from(Ticket)
             .where(Ticket.status == "resolved")
+            .where(Ticket.updated_at.isnot(None))
             .where(Ticket.updated_at >= today_start)
         )
-        return result.scalar_one()
+        return result.scalar_one_or_none() or 0
 
     async def get_all_paginated(
         self,
