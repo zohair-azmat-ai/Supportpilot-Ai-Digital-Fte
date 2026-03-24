@@ -13,7 +13,13 @@ from app.core.database import get_db
 from app.core.security import verify_token
 
 # Re-export get_db so dependants can import from a single location
-__all__ = ["get_db", "get_current_user", "get_current_active_user", "require_admin"]
+__all__ = [
+    "get_db",
+    "get_current_user",
+    "get_current_active_user",
+    "get_current_admin_user",
+    "require_admin",
+]
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
@@ -81,4 +87,11 @@ async def require_admin(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required",
         )
+    return current_user
+
+
+async def get_current_admin_user(
+    current_user=Depends(require_admin),
+):
+    """Backward-compatible admin dependency used by protected routes."""
     return current_user
