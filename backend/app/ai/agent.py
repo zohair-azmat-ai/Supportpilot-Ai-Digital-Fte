@@ -1,15 +1,23 @@
 """
-SupportPilot AI Agent — tool-based agentic support system.
+SupportPilot AI Agent — LLM-driven structured support decision engine.
 
-The agent runs a multi-step reasoning loop using OpenAI function calling:
-  1. get_customer_history  (always first)
-  2. search_knowledge_base (always second)
-  3. create_ticket         (always third)
-  4. escalate_to_human     (if needed)
-  5. send_response         (always last — terminates loop)
+Architecture (Level 4):
 
-The agent loop continues until send_response is called or max_iterations is reached.
-Returns AIResponse — same type as the old AIService, so callers are unchanged.
+  Step 1 — SupportDecisionEngine
+    ├── Calls OpenAI with a structured JSON-mode prompt
+    ├── Receives and validates a SupportDecision (reply, intent, category,
+    │   priority, sentiment, urgency, confidence, escalate)
+    └── This is the sole source of truth for the customer-facing reply.
+
+  Step 2 — Tool loop (side effects only)
+    ├── get_customer_history  — loads prior tickets/conversations for context
+    ├── search_knowledge_base — retrieves relevant help articles
+    ├── create_ticket         — logs the interaction with correct category/priority
+    ├── escalate_to_human     — flags conversation if decision.escalate is True
+    └── send_response         — terminates the loop (uses decision engine's reply)
+
+Returns AIResponse — same type as before, fully backward-compatible.
+New fields: category, priority, sentiment, urgency (from SupportDecision).
 """
 
 from __future__ import annotations
@@ -19,6 +27,7 @@ import logging
 from typing import Any
 
 from app.ai.client import get_openai_client
+from app.ai.decision_engine import decision_engine
 from app.ai.service import AIResponse, _build_fallback_response
 from app.ai.tools import TOOL_DEFINITIONS, AgentContext, ToolExecutor
 from app.core.config import settings
@@ -27,325 +36,40 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Agent system prompt
+# Agent system prompt (used by the tool-loop — side effects only)
 # ---------------------------------------------------------------------------
 
-AGENT_SYSTEM_PROMPT = """You are SupportPilot AI — a professional, human-like customer support assistant.
-Your goal is to resolve customer issues effectively while maintaining a helpful, calm, and natural tone.
-You MUST NOT write a direct reply to the customer. The ONLY way to respond is through the send_response tool.
+AGENT_SYSTEM_PROMPT = """\
+You are SupportPilot AI — running in side-effects mode.
 
-## MANDATORY TOOL EXECUTION ORDER
-Call tools in this exact sequence every time — no exceptions:
-  1. get_customer_history  — ALWAYS first. Retrieves prior tickets and conversations for context.
-  2. search_knowledge_base — ALWAYS second. Search for relevant help articles using keywords from the customer's message.
-  3. create_ticket         — ALWAYS third. Log this interaction, UNLESS a ticket already exists for this conversation_id.
-  4. escalate_to_human     — Call ONLY when escalation is truly required (see criteria below). Skip otherwise.
-  5. send_response         — ALWAYS last. Deliver the final reply. This terminates the loop.
+The customer's reply has already been determined by the decision engine.
+Your ONLY job is to execute the following tools in order to log this interaction:
 
-## CORE BEHAVIOUR RULES
-1. ALWAYS try to solve the issue first — never escalate immediately.
-2. DO NOT escalate for common, self-serviceable problems (login, password reset, account access).
-3. Provide clear, step-by-step guidance. Use bullet points where helpful.
-4. Keep responses natural and human — not robotic or scripted.
-5. Avoid repeating the same phrases across turns.
-6. Be concise but genuinely helpful.
+  1. get_customer_history(user_id)      — ALWAYS first
+  2. search_knowledge_base(query)       — ALWAYS second
+  3. create_ticket(title, description, category, priority) — ALWAYS third
+  4. escalate_to_human(reason, urgency) — ONLY if escalation_required=true (see context)
+  5. send_response(message, intent, confidence) — ALWAYS last; terminates the loop
 
-## UNDERSTANDING THE CUSTOMER
-- Read the message carefully before responding.
-- DO NOT assume the customer has tried anything unless they explicitly say so.
-- Treat each message on its own — do not invent history.
-- NEVER say "I see you've been working on this for a while" unless the customer has clearly said so.
+IMPORTANT:
+- For create_ticket: use the category and priority that match the customer's issue.
+- For send_response: the message you provide will be overridden by the pre-determined
+  response. Just pass a brief summary. Set intent and confidence accurately.
+- DO NOT make up information about the customer's history.
+- Follow the tool order exactly.
 
-## NORMAL ISSUE HANDLING (NO ESCALATION)
-For the following, ALWAYS troubleshoot first:
-  - Login issues / can't sign in
-  - Forgot password / reset password
-  - Reset email not received
-  - Invalid credentials
-  - Basic account access problems
-
-Response structure for these issues:
-  1. Acknowledge the issue warmly
-  2. Provide step-by-step solution
-  3. Add a helpful tip if relevant
-  4. Offer further help
-
-EXAMPLE — User: "I forgot my password"
-GOOD: "No worries, I can help you with that 🙂\n\nHere's what you can do:\n• Go to the login page and click 'Forgot Password'\n• Enter your registered email\n• Check your inbox (and spam folder)\n\nIf you don't receive the email within a few minutes, let me know and I'll help you further."
-BAD:  "I understand your issue. I am escalating this to a human agent." ← Never do this for simple issues.
-
-## ESCALATION CRITERIA (STRICT)
-Call escalate_to_human ONLY when:
-  - Customer explicitly asks to speak with a human agent
-  - Customer shows clear frustration or anger after troubleshooting has failed
-  - The same issue persists after the customer has already tried the suggested steps
-  - Security concern: hacked account, suspected fraud, unauthorised access
-  - Legal or regulatory threat: "lawyer", "GDPR", "sue", "report"
-  - Billing dispute requiring manual intervention
-  - Critical production outage or enterprise-level impact
-
-NEVER escalate on the first message.
-NEVER escalate simple or common issues.
-
-EXAMPLE — Smart escalation:
-User: "I already tried that multiple times and it's still not working."
-Response: "Thanks for trying those steps — I understand how frustrating that can be.\n\nSince the issue is still persisting, I'm going to escalate this to a human support agent who can assist you directly."
-
-## TOOL REFERENCE
-- get_customer_history(user_id): Returns up to 5 recent tickets and 3 recent conversations.
-- search_knowledge_base(query): Keyword search across help articles. Use specific terms from the customer's message.
+TOOL REFERENCE
+- get_customer_history(user_id): Returns prior tickets and conversations.
+- search_knowledge_base(query): Keyword search across help articles.
 - create_ticket(title, description, category, priority):
-    Categories: technical, billing, account, general, complaint, feature_request
-    Priorities: low (questions), medium (inconvenience), high (disruption), urgent (critical/security)
-- escalate_to_human(reason, urgency): Flags conversation for human takeover. Urgency: normal or urgent.
-- send_response(message, intent, confidence): Sends the reply and ends the agent loop.
-    Intents: general, technical, billing, account, complaint, feature_request, urgent
-    Confidence: 0.0–1.0 (your certainty in the intent classification)
-
-## TONE & STYLE
-- Friendly and human-like — not a scripted bot
-- Professional but slightly conversational
-- Max one emoji per response, only if it feels natural
-- Never make promises about outcomes ("we will definitely refund you")
-
-## INTENT CATEGORIES
-- general: enquiries, greetings, feedback not fitting other categories
-- technical: bugs, errors, performance issues, integration problems
-- billing: invoices, charges, refunds, subscription changes
-- account: login issues, password resets, profile changes, permissions
-- complaint: expressions of dissatisfaction with service or product
-- feature_request: suggestions for new features or improvements
-- urgent: critical outages, security incidents, high-severity failures
-
-Solve first. Escalate only when truly needed. Always try to help.
+    Categories: technical | billing | account | general | complaint | feature_request
+    Priorities: low | medium | high | urgent
+- escalate_to_human(reason, urgency): Flags conversation for human takeover.
+    Urgency: normal | urgent
+- send_response(message, intent, confidence):
+    Intents: general | technical | billing | account | complaint | feature_request | urgent
+    Confidence: 0.0–1.0
 """
-
-
-# ---------------------------------------------------------------------------
-# Pre-flight intent classification + response selection
-# ---------------------------------------------------------------------------
-
-# --- Keyword sets ---
-
-_GRATITUDE_KEYWORDS = frozenset({
-    "thank you", "thanks", "appreciate it", "appreciated", "thank u",
-    "many thanks", "cheers", "thx", "ty", "tysm", "grateful",
-    "that helped", "that's helpful", "that was helpful", "problem solved",
-    "issue resolved", "all good", "sorted", "got it", "perfect thanks",
-})
-
-_ACCOUNT_KEYWORDS = frozenset({
-    "password", "reset", "login", "log in", "sign in", "signin",
-    "credential", "credentials", "locked out", "account", "access denied",
-    "can't login", "cannot login", "forgot password",
-})
-
-_REPEATED_ISSUE_KEYWORDS = frozenset({
-    "already", "still", "tried", "again", "same", "still not",
-    "not working", "issue not solved", "not fixed", "same problem",
-    "same issue", "unresolved", "keeps happening", "nothing works",
-    "didn't help", "didn't fix", "did not help", "did not fix",
-    "no solution", "still broken", "still failing", "happening again",
-})
-
-# Common words excluded from topic-overlap memory check
-_STOP_WORDS = frozenset({
-    "i", "my", "me", "the", "a", "an", "is", "it", "to", "have", "has",
-    "am", "are", "was", "be", "of", "in", "for", "and", "or", "but",
-    "that", "this", "with", "on", "at", "can", "you", "your", "we",
-    "not", "no", "do", "don", "get", "got", "help", "please", "hi",
-})
-
-# --- Response variant pools (3 variants each, never repeat the last reply) ---
-
-_GRATITUDE_VARIANTS = [
-    "Glad I could help! 😊\nIf you need anything else, feel free to reach out anytime.",
-    "Happy to help! 😊\nDon't hesitate to get in touch if anything else comes up.",
-    "You're welcome! 😊\nWe're here whenever you need us — take care!",
-]
-
-_ACCOUNT_TROUBLESHOOT_VARIANTS = [
-    # Variant 0 — login issue (bullet-point flow)
-    (
-        "I understand you're having trouble logging in. Let's try a few quick steps:\n\n"
-        "• Reset your password using the 'Forgot Password' option\n"
-        "• Check your email (including spam folder) for the reset link\n"
-        "• Try a different browser or clear your cache\n\n"
-        "If the issue continues, I'll escalate this to our support team immediately."
-    ),
-    # Variant 1 — password recovery (numbered steps)
-    (
-        "I can help you recover your account. Please follow these steps:\n\n"
-        "1. Click **Forgot Password** on the login page\n"
-        "2. Enter your registered email\n"
-        "3. Check your inbox or spam folder for the reset link\n\n"
-        "If you don't receive it within a few minutes, let me know and I'll assist further."
-    ),
-    # Variant 2 — incognito / cache / SSO angle
-    (
-        "Let's get your account access sorted. A few things to check:\n\n"
-        "1. Use the **Forgot Password** option on the login screen\n"
-        "2. Confirm you're entering the email you originally registered with\n"
-        "3. Check spam/junk for the password reset email\n"
-        "4. Try opening the reset link in an incognito/private window\n\n"
-        "If none of these resolve it, reply here and I'll connect you with an agent."
-    ),
-]
-
-_ACCOUNT_ESCALATION_VARIANTS = [
-    (
-        "I understand you've already tried resolving this issue. "
-        "Since it's still happening, I'm escalating this to a human support agent "
-        "who will assist you further."
-    ),
-    (
-        "I can see you've been working on this for a while — I'm sorry it hasn't been "
-        "resolved yet. I'm connecting you with a human support agent now who will "
-        "personally take this forward."
-    ),
-    (
-        "Since the issue is persisting despite your attempts, I'm escalating this "
-        "immediately. A human support agent will reach out to you shortly."
-    ),
-]
-
-_ACCOUNT_ALT_VARIANTS = [
-    # Variant 0 — repeated login attempts (exact spec response)
-    (
-        "It looks like there may have been multiple login attempts. "
-        "Please try the following:\n\n"
-        "• Wait 15–30 minutes before retrying\n"
-        "• Disable any VPN or proxy\n"
-        "• Ensure your device time is synced\n\n"
-        "Still not working? I'll escalate this to our account team right away."
-    ),
-    # Variant 1 — locked account + browser/device alternatives
-    (
-        "Let me suggest a different approach this time.\n\n"
-        "• Your account may be locked due to too many failed attempts — wait 15–30 minutes\n"
-        "• Try a completely different browser or device\n"
-        "• Disable any VPN or proxy you may be using, as these can block authentication\n"
-        "• If you have 2FA enabled, ensure your authenticator app time is in sync\n\n"
-        "Still no luck? Just say so and I'll escalate this to our account team directly."
-    ),
-    (
-        "Here's another angle to try:\n\n"
-        "1. Check whether the account was created under a different email address\n"
-        "2. Try the 'Sign in with Google/Microsoft' option if available\n"
-        "3. A temporary lock lifts automatically after ~30 minutes — try again then\n"
-        "4. If using a work device, your IT policy may be blocking the login domain\n\n"
-        "If none of these apply, reply back and I'll connect you with an account specialist now."
-    ),
-]
-
-_GENERAL_ESCALATION_VARIANTS = [
-    (
-        "I understand the issue is still not resolved. "
-        "I'm escalating this to a human support agent who will assist you further shortly."
-    ),
-    (
-        "I'm sorry to hear this is still happening — I'm connecting you with a human "
-        "support agent right now. They will be with you shortly."
-    ),
-    (
-        "Since this is an ongoing issue, I'm passing this to a human support agent "
-        "who can give it the full attention it deserves."
-    ),
-]
-
-_SMART_ESCALATION_MSG = (
-    "I see this issue is persisting. I'm escalating this to a human agent "
-    "for immediate assistance."
-)
-
-
-# --- Helpers ---
-
-def _get_last_ai_response(conversation_history: list[dict]) -> str:
-    """Return the content of the most recent AI message in history, or empty string."""
-    for m in reversed(conversation_history):
-        if m.get("sender_type") in ("ai", "agent") and m.get("content"):
-            return m["content"].strip()
-    return ""
-
-
-def _count_account_intent_in_history(conversation_history: list[dict]) -> int:
-    """Count prior user messages that contain account/login keywords."""
-    return sum(
-        1
-        for m in conversation_history
-        if m.get("sender_type") == "user"
-        and m.get("content")
-        and any(k in m["content"].lower() for k in _ACCOUNT_KEYWORDS)
-    )
-
-
-def _count_ai_replies_in_history(conversation_history: list[dict]) -> int:
-    """Count how many AI replies exist in the conversation so far."""
-    return sum(1 for m in conversation_history if m.get("sender_type") in ("ai", "agent"))
-
-
-def _pick_variant(variants: list[str], conversation_history: list[dict]) -> str:
-    """Choose a response variant, preferring one different from the last AI reply.
-
-    Cycles deterministically through available options so the customer
-    never sees the exact same text twice in a row.
-    """
-    last_ai = _get_last_ai_response(conversation_history)
-    candidates = [v for v in variants if v.strip() != last_ai]
-    pool = candidates if candidates else variants
-    return pool[len(conversation_history) % len(pool)]
-
-
-# --- Main classification function ---
-
-def _classify_message_signals(
-    user_message: str,
-    conversation_history: list[dict],
-) -> dict:
-    """Classify the message and conversation into intent + repeated_issue signals.
-
-    Checks two dimensions:
-
-    * **intent** — ``"account_issue"`` if login/password/credential keywords are
-      present; ``"general"`` otherwise.
-
-    * **repeated_issue** — ``True`` when:
-      - The message contains an explicit frustration/retry phrase (e.g. "already
-        tried", "still not working", "same issue"), OR
-      - The topic has appeared in ≥2 of the last 6 user turns (memory signal).
-
-    Returns a dict with keys ``intent`` (str) and ``repeated_issue`` (bool).
-    Safe when ``user_message`` is empty or ``conversation_history`` is empty.
-    """
-    msg = user_message.lower().strip()
-    if not msg:
-        return {"intent": "general", "repeated_issue": False}
-
-    intent = "account_issue" if any(k in msg for k in _ACCOUNT_KEYWORDS) else "general"
-
-    # Signal A: explicit repeated-issue keyword
-    repeated = any(kw in msg for kw in _REPEATED_ISSUE_KEYWORDS)
-
-    # Signal B: topic repetition across history (memory check)
-    if not repeated:
-        prior_user_msgs = [
-            m.get("content", "").lower()
-            for m in conversation_history
-            if m.get("sender_type") == "user" and m.get("content")
-        ]
-        if len(prior_user_msgs) >= 2:
-            current_words = set(msg.split()) - _STOP_WORDS
-            if len(current_words) >= 2:
-                overlap_count = sum(
-                    1
-                    for prev in prior_user_msgs[-6:]
-                    if len((set(prev.split()) - _STOP_WORDS) & current_words) >= 2
-                )
-                if overlap_count >= 2:
-                    repeated = True
-
-    return {"intent": intent, "repeated_issue": repeated}
 
 
 # ---------------------------------------------------------------------------
@@ -354,9 +78,13 @@ def _classify_message_signals(
 
 
 class SupportAgent:
-    """Tool-calling agent that replaces the direct AIService.generate_response() call.
+    """Tool-calling agent with LLM-driven structured decision engine.
 
-    Returns AIResponse so existing callers require no changes.
+    Every customer message is processed in two phases:
+      1. SupportDecisionEngine generates a validated SupportDecision (reply + metadata).
+      2. The tool loop runs side effects: ticket creation, KB search, escalation.
+
+    Returns AIResponse — fully backward-compatible with existing callers.
     """
 
     MAX_ITERATIONS = 8
@@ -369,260 +97,194 @@ class SupportAgent:
         user_message: str,
         conversation_history: list[dict],
     ) -> AIResponse:
-        """Run the full agent workflow for one customer message.
+        """Process one customer message through the full decision + side-effect pipeline.
 
         Args:
             db: AsyncSession database session.
-            user_id: ID of the customer sending the message.
-            conversation_id: ID of the current conversation.
-            user_message: The latest message text from the customer.
-            conversation_history: List of prior message dicts with
-                ``sender_type`` and ``content`` keys (oldest first).
+            user_id: Customer's user ID.
+            conversation_id: Current conversation ID.
+            user_message: Latest message text from the customer.
+            conversation_history: Prior messages [{sender_type, content}, ...].
 
         Returns:
-            AIResponse compatible with the existing service interface.
-            Gracefully falls back to a context-aware response on any error.
+            AIResponse — always valid, never raises.
         """
         # ------------------------------------------------------------------
-        # Pre-flight classification — runs before any OpenAI call.
-        # Handles clear-cut cases immediately; ambiguous ones go to OpenAI.
+        # Phase 1 — Decision engine: generates structured reply + metadata
         # ------------------------------------------------------------------
+        try:
+            decision = await decision_engine.run(user_message, conversation_history)
+        except Exception as exc:  # noqa: BLE001 — absolute safety net
+            logger.error("Decision engine failed: %s", exc, exc_info=True)
+            fallback = _build_fallback_response(user_message)
+            return fallback
 
-        # Gratitude check — evaluated first; overrides all other intents.
-        # A closing message should never trigger issue analysis or escalation.
-        if user_message and any(kw in user_message.lower() for kw in _GRATITUDE_KEYWORDS):
-            logger.info("Pre-flight: gratitude | conversation=%s", conversation_id)
-            return AIResponse(
-                response=_pick_variant(_GRATITUDE_VARIANTS, conversation_history),
-                intent="gratitude",
-                confidence=0.95,
-                should_escalate=False,
-            )
+        logger.info(
+            "Decision: intent=%s category=%s priority=%s sentiment=%s "
+            "urgency=%s confidence=%.2f escalate=%s | conversation=%s",
+            decision.intent, decision.category, decision.priority,
+            decision.sentiment, decision.urgency, decision.confidence,
+            decision.escalate, conversation_id,
+        )
 
-        signals = _classify_message_signals(user_message, conversation_history)
-        intent = signals["intent"]
-        repeated = signals["repeated_issue"]
-
-        if intent == "account_issue":
-            # 3-stage progression: troubleshoot → alternative approach → escalate
-            prior_count = _count_account_intent_in_history(conversation_history)
-
-            if prior_count >= 2 or repeated:
-                # 3rd+ occurrence or explicit repeated-issue keyword → escalate
-                reason = "Account issue raised multiple times without resolution"
-                logger.info(
-                    "Pre-flight: account stage 3 (escalate) | prior=%d | conversation=%s",
-                    prior_count, conversation_id,
-                )
-                return AIResponse(
-                    response=_pick_variant(_ACCOUNT_ESCALATION_VARIANTS, conversation_history),
-                    intent="account",
-                    confidence=0.9,
-                    should_escalate=True,
-                    escalation_reason=reason,
-                )
-
-            if prior_count == 1:
-                # 2nd occurrence → alternative approach
-                logger.info(
-                    "Pre-flight: account stage 2 (alt approach) | conversation=%s",
-                    conversation_id,
-                )
-                return AIResponse(
-                    response=_pick_variant(_ACCOUNT_ALT_VARIANTS, conversation_history),
-                    intent="account",
-                    confidence=0.85,
-                    should_escalate=False,
-                )
-
-            # First time → standard troubleshooting steps
-            logger.info("Pre-flight: account stage 1 (troubleshoot) | conversation=%s", conversation_id)
-            return AIResponse(
-                response=_pick_variant(_ACCOUNT_TROUBLESHOOT_VARIANTS, conversation_history),
-                intent="account",
-                confidence=0.85,
-                should_escalate=False,
-            )
-
-        if repeated:
-            # Any non-account repeated/unresolved issue → general escalation
-            reason = "Repeated or unresolved issue detected"
-            logger.info("Pre-flight: repeated issue | conversation=%s", conversation_id)
-            return AIResponse(
-                response=_pick_variant(_GENERAL_ESCALATION_VARIANTS, conversation_history),
-                intent="complaint",
-                confidence=0.9,
-                should_escalate=True,
-                escalation_reason=reason,
-            )
-
+        # ------------------------------------------------------------------
+        # Phase 2 — Tool loop: side effects (history, KB, ticket, escalate)
+        # The decision is injected into AgentContext so send_response uses it.
+        # ------------------------------------------------------------------
         ctx = AgentContext(db=db, user_id=user_id, conversation_id=conversation_id)
+        ctx.predecided = decision  # inject: send_response will use decision.reply
+
         executor = ToolExecutor()
         client = get_openai_client()
-
-        messages = self._build_initial_messages(conversation_history, user_message)
+        messages = self._build_initial_messages(conversation_history, user_message, decision)
 
         try:
             for iteration in range(self.MAX_ITERATIONS):
                 ctx.iterations = iteration + 1
-                logger.debug("Agent iteration %d/%d", iteration + 1, self.MAX_ITERATIONS)
+                logger.debug("Tool loop iteration %d/%d", iteration + 1, self.MAX_ITERATIONS)
 
                 response = await client.chat.completions.create(
                     model=settings.OPENAI_MODEL,
                     messages=messages,  # type: ignore[arg-type]
                     tools=TOOL_DEFINITIONS,  # type: ignore[arg-type]
-                    tool_choice="required",  # force tool use every turn
-                    temperature=0.3,
-                    max_tokens=1000,
+                    tool_choice="required",
+                    temperature=0.2,
+                    max_tokens=800,
                 )
 
                 msg = response.choices[0].message
 
-                # No tool calls — model tried to respond directly.
-                # This should not happen with tool_choice="required", but handle
-                # defensively in case the API behaves unexpectedly.
                 if not msg.tool_calls:
-                    logger.warning(
-                        "Agent produced no tool calls on iteration %d", iteration
-                    )
-                    if msg.content:
-                        ctx.final_response = msg.content
+                    logger.warning("Tool loop: no tool calls on iteration %d", iteration)
+                    if not ctx.final_response:
+                        ctx.final_response = decision.reply
                     break
 
-                # Append assistant message with its tool calls to the history
-                messages.append(
-                    {
-                        "role": "assistant",
-                        "content": msg.content or "",
-                        "tool_calls": [
-                            {
-                                "id": tc.id,
-                                "type": "function",
-                                "function": {
-                                    "name": tc.function.name,
-                                    "arguments": tc.function.arguments,
-                                },
-                            }
-                            for tc in msg.tool_calls
-                        ],
-                    }
-                )
+                messages.append({
+                    "role": "assistant",
+                    "content": msg.content or "",
+                    "tool_calls": [
+                        {
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {
+                                "name": tc.function.name,
+                                "arguments": tc.function.arguments,
+                            },
+                        }
+                        for tc in msg.tool_calls
+                    ],
+                })
 
-                # Execute each tool call in sequence
                 for tool_call in msg.tool_calls:
                     tool_name = tool_call.function.name
                     args = _json.loads(tool_call.function.arguments)
 
                     logger.info(
-                        "Agent calling tool: %s | args=%s",
-                        tool_name,
-                        list(args.keys()),
+                        "Tool: %s | args=%s | conversation=%s",
+                        tool_name, list(args.keys()), conversation_id,
                     )
 
                     result = await executor.execute(tool_name, args, ctx)
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "content": result,
+                    })
 
-                    # Feed tool result back into the conversation
-                    messages.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": tool_call.id,
-                            "content": result,
-                        }
-                    )
-
-                    # send_response sets ctx.final_response — terminate loop
                     if tool_name == "send_response" and ctx.final_response:
                         break
 
                 if ctx.final_response:
                     break
 
-            # ---------------------------------------------------------------
-            # Build AIResponse from accumulated context
-            # ---------------------------------------------------------------
             if not ctx.final_response:
                 logger.warning(
-                    "Agent loop ended after %d iterations without send_response — "
-                    "using fallback",
+                    "Tool loop ended after %d iterations without send_response",
                     self.MAX_ITERATIONS,
                 )
-                return _build_fallback_response(user_message)
-
-            # Smart escalation: low confidence persisting after 2+ prior AI replies
-            ai_reply_count = _count_ai_replies_in_history(conversation_history)
-            if (
-                not ctx.should_escalate
-                and ctx.confidence < 0.5
-                and ai_reply_count >= 2
-            ):
-                logger.info(
-                    "Smart escalation: low confidence (%.2f) after %d AI replies | conversation=%s",
-                    ctx.confidence, ai_reply_count, conversation_id,
-                )
-                return AIResponse(
-                    response=_SMART_ESCALATION_MSG,
-                    intent=ctx.intent,
-                    confidence=ctx.confidence,
-                    should_escalate=True,
-                    escalation_reason=f"Low confidence ({ctx.confidence:.2f}) after {ai_reply_count} replies",
-                    tools_called=ctx.tools_called,
-                    iterations=ctx.iterations,
-                    kb_articles_found=ctx.kb_articles_found,
-                    ticket_created=ctx.ticket_created,
-                )
-
-            return AIResponse(
-                response=ctx.final_response,
-                intent=ctx.intent,
-                confidence=ctx.confidence,
-                should_escalate=ctx.should_escalate,
-                escalation_reason=ctx.escalation_reason,
-                tools_called=ctx.tools_called,
-                iterations=ctx.iterations,
-                kb_articles_found=ctx.kb_articles_found,
-                ticket_created=ctx.ticket_created,
-            )
+                ctx.final_response = decision.reply
 
         except Exception as exc:  # noqa: BLE001
-            logger.error("SupportAgent.run() failed: %s", exc, exc_info=True)
-            return _build_fallback_response(user_message)
+            logger.error("Tool loop failed: %s", exc, exc_info=True)
+            # Decision engine already gave us a valid reply; continue with it.
+
+        # ------------------------------------------------------------------
+        # If decision says escalate but tool loop didn't call escalate_to_human,
+        # perform it directly so the conversation status is always consistent.
+        # ------------------------------------------------------------------
+        if decision.escalate and not ctx.should_escalate:
+            try:
+                from app.repositories.conversation import ConversationRepository
+                conv_repo = ConversationRepository(db)
+                await conv_repo.update(conversation_id, {"status": "escalated"})
+                ctx.should_escalate = True
+                ctx.escalation_reason = decision.escalation_reason
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Direct escalation update failed: %s", exc)
+
+        # ------------------------------------------------------------------
+        # Build final AIResponse — decision is source of truth for reply/metadata
+        # ------------------------------------------------------------------
+        return AIResponse(
+            response=decision.reply,
+            intent=decision.intent,
+            confidence=decision.confidence,
+            should_escalate=decision.escalate,
+            escalation_reason=decision.escalation_reason,
+            category=decision.category,
+            priority=decision.priority,
+            sentiment=decision.sentiment,
+            urgency=decision.urgency,
+            tools_called=ctx.tools_called,
+            iterations=ctx.iterations,
+            kb_articles_found=ctx.kb_articles_found,
+            ticket_created=ctx.ticket_created,
+        )
 
     def _build_initial_messages(
         self,
         conversation_history: list[dict],
         user_message: str,
+        decision: Any,
     ) -> list[dict]:
-        """Build the initial messages array for the agent.
+        """Build the initial messages array for the tool loop.
 
-        Includes the system prompt, up to the last 6 history entries (to stay
-        within context window limits), and the new user message.
-
-        Args:
-            conversation_history: Prior messages in ``{sender_type, content}`` format.
-            user_message: The latest customer message.
-
-        Returns:
-            List of message dicts ready for the OpenAI chat completions API.
+        Includes the system prompt, up to the last 6 history entries, the new
+        user message, and a context note with the pre-determined decision so the
+        tool loop agent can create an accurately-categorised ticket.
         """
         messages: list[dict] = [{"role": "system", "content": AGENT_SYSTEM_PROMPT}]
 
-        for entry in conversation_history[-6:]:  # last 6 turns for context window
+        for entry in conversation_history[-6:]:
             sender = entry.get("sender_type", "user")
             content = entry.get("content", "")
-
+            if not content:
+                continue
             if sender == "user":
                 messages.append({"role": "user", "content": content})
             elif sender in ("ai", "agent"):
-                # Strip the JSON wrapper used by the old AIService so that
-                # historical assistant messages are human-readable text.
                 try:
                     parsed = _json.loads(content)
-                    content = parsed.get("response", content)
+                    content = parsed.get("reply") or parsed.get("response", content)
                 except Exception:  # noqa: BLE001
                     pass
                 messages.append({"role": "assistant", "content": content})
 
         messages.append({"role": "user", "content": user_message})
+
+        # Inject decision context so the tool loop creates the right ticket
+        messages.append({
+            "role": "system",
+            "content": (
+                f"[Decision context] "
+                f"intent={decision.intent} category={decision.category} "
+                f"priority={decision.priority} urgency={decision.urgency} "
+                f"escalation_required={decision.escalate} "
+                f"confidence={decision.confidence:.2f}"
+            ),
+        })
+
         return messages
 
 

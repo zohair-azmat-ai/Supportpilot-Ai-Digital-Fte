@@ -15,7 +15,10 @@ Tool execution order (enforced by agent system prompt):
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any, Optional
+
+if TYPE_CHECKING:
+    from app.schemas.ai_decision import SupportDecision
 
 
 # ---------------------------------------------------------------------------
@@ -186,6 +189,10 @@ class AgentContext:
         self.tools_called: list[str] = []
         self.iterations: int = 0
         self.kb_articles_found: int = 0
+        # Pre-determined decision from SupportDecisionEngine (injected by SupportAgent)
+        # When set, send_response uses this reply/intent/confidence instead of the
+        # model-generated message, ensuring the decision engine is the source of truth.
+        self.predecided: Optional["SupportDecision"] = None
 
 
 # ---------------------------------------------------------------------------
@@ -347,11 +354,23 @@ class ToolExecutor:
         )
 
     async def _send_response(self, args: dict, ctx: AgentContext) -> str:
-        """Set the final response — terminates the agent loop."""
-        ctx.final_response = args["message"]
-        ctx.intent = args.get("intent", "general")
-        ctx.confidence = float(args.get("confidence", 0.7))
+        """Set the final response — terminates the agent loop.
+
+        When a pre-determined decision exists (injected by SupportDecisionEngine),
+        the decision's reply is used as the response text instead of the model-
+        generated message.  Intent and confidence always reflect the decision engine.
+        """
+        if ctx.predecided is not None:
+            # Decision engine is the source of truth for the reply
+            ctx.final_response = ctx.predecided.reply
+            ctx.intent = ctx.predecided.intent
+            ctx.confidence = ctx.predecided.confidence
+        else:
+            ctx.final_response = args["message"]
+            ctx.intent = args.get("intent", "general")
+            ctx.confidence = float(args.get("confidence", 0.7))
+
         return (
             f"Response queued for delivery. "
-            f"intent={ctx.intent} confidence={ctx.confidence}"
+            f"intent={ctx.intent} confidence={ctx.confidence:.2f}"
         )

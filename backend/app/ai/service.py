@@ -18,14 +18,39 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class AIResponse:
-    """Structured response from the AI service / agent."""
+    """Structured response from the AI service / agent.
+
+    Core fields (always populated):
+        response          — Human-readable reply text
+        intent            — Intent category (account, billing, technical, …)
+        confidence        — LLM confidence 0.0–1.0
+        should_escalate   — Whether to escalate to a human agent
+        escalation_reason — Reason string if escalation is flagged
+
+    Structured decision fields (populated by SupportDecisionEngine):
+        category  — Support category for ticket routing
+        priority  — Ticket priority level (low/medium/high/urgent)
+        sentiment — Customer sentiment (positive/neutral/negative/frustrated)
+        urgency   — Issue urgency (low/medium/high)
+
+    Agent-run metadata (populated by the tool loop):
+        tools_called      — List of tool names invoked
+        iterations        — Number of agent loop iterations
+        kb_articles_found — KB articles retrieved
+        ticket_created    — Whether a ticket was created
+    """
 
     response: str
     intent: str
     confidence: float
     should_escalate: bool
     escalation_reason: Optional[str] = None
-    # Agent-run metadata (populated by SupportAgent, empty for legacy AIService path)
+    # Structured decision fields — from SupportDecisionEngine
+    category: str = "general"
+    priority: str = "medium"
+    sentiment: str = "neutral"
+    urgency: str = "medium"
+    # Agent-run metadata
     tools_called: List[str] = field(default_factory=list)
     iterations: int = 0
     kb_articles_found: int = 0
