@@ -144,6 +144,8 @@ class MessageService:
             "model_used": settings.OPENAI_MODEL,
             "was_escalated": ai_result.should_escalate,  # type: ignore[attr-defined]
             "escalation_reason": ai_result.escalation_reason,  # type: ignore[attr-defined]
+            "escalation_level": getattr(ai_result, "escalation_level", "none"),
+            "escalation_cause": getattr(ai_result, "escalation_cause", None),
             "ticket_created": getattr(ai_result, "ticket_created", False),
             "kb_articles_found": getattr(ai_result, "kb_articles_found", 0),
         })

@@ -58,6 +58,8 @@ class AgentMetrics(Base):
     model_used: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     was_escalated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     escalation_reason: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    escalation_level: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    escalation_cause: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     ticket_created: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     kb_articles_found: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(

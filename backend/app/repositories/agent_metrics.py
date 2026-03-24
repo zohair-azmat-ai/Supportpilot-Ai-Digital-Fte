@@ -125,6 +125,21 @@ class AgentMetricsRepository(BaseRepository[AgentMetrics]):
             for r in urgency_result
         ]
 
+        # --- Escalation cause breakdown ---
+        cause_result = await self.db.execute(
+            select(
+                AgentMetrics.escalation_cause,
+                func.count(AgentMetrics.id).label("cnt"),
+            )
+            .where(AgentMetrics.escalation_cause.isnot(None))
+            .group_by(AgentMetrics.escalation_cause)
+            .order_by(func.count(AgentMetrics.id).desc())
+        )
+        escalation_cause_breakdown = [
+            {"cause": r.escalation_cause, "count": r.cnt}
+            for r in cause_result
+        ]
+
         return {
             "total_interactions": total,
             "avg_confidence": round(float(row["avg_confidence"] or 0.0), 4),
@@ -137,6 +152,7 @@ class AgentMetricsRepository(BaseRepository[AgentMetrics]):
             "top_intents": top_intents,
             "sentiment_breakdown": sentiment_breakdown,
             "urgency_distribution": urgency_distribution,
+            "escalation_cause_breakdown": escalation_cause_breakdown,
         }
 
     # ------------------------------------------------------------------

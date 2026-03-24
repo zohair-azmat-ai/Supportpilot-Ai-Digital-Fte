@@ -314,12 +314,32 @@ class ToolExecutor:
         return "\n".join(lines)
 
     async def _create_ticket(self, args: dict, ctx: AgentContext) -> str:
-        """Create a support ticket for this interaction."""
+        """Create a support ticket for this interaction.
+
+        Checks for an existing ticket on this conversation first to avoid
+        creating duplicates when the agent is called across multiple turns.
+        """
         from app.repositories.ticket import TicketRepository
 
         ticket_repo = TicketRepository(ctx.db)
 
-        # Enrich ticket with AI signals from the decision engine when available
+        # -- Duplicate guard: reuse existing ticket for this conversation --
+        existing = await ticket_repo.get_by_conversation(ctx.conversation_id)
+        if existing:
+            open_ticket = next(
+                (t for t in existing if t.status in ("open", "in_progress")),
+                existing[0],
+            )
+            ctx.ticket_id = open_ticket.id
+            ctx.ticket_created = False  # not created, just reused
+            return (
+                f"Ticket already exists for this conversation: "
+                f"ID={open_ticket.id[:8].upper()} "
+                f"| title='{open_ticket.title}' | status={open_ticket.status} "
+                f"| priority={open_ticket.priority}"
+            )
+
+        # -- Create new ticket enriched with AI signals --
         ticket_data: dict = {
             "user_id": ctx.user_id,
             "conversation_id": ctx.conversation_id,

@@ -34,6 +34,7 @@ from typing import Any
 from app.ai.client import get_openai_client
 from app.ai.context_builder import context_builder
 from app.ai.decision_engine import decision_engine
+from app.ai.escalation_engine import EscalationDecision, escalation_engine
 from app.ai.service import AIResponse, _build_fallback_response
 from app.ai.tools import TOOL_DEFINITIONS, AgentContext, ToolExecutor
 from app.core.config import settings
@@ -162,15 +163,54 @@ class SupportAgent:
         )
 
         # ------------------------------------------------------------------
+        # Phase 1c — Escalation engine: deterministic post-processing
+        # Supplements/overrides LLM escalation with rule-based hard checks
+        # (security, legal, explicit human request, frustration, etc.)
+        # ------------------------------------------------------------------
+        esc_decision: EscalationDecision = escalation_engine.evaluate(
+            context=conv_context,
+            llm_decision=decision,
+            user_message=user_message,
+        )
+
+        # Merge escalation engine result into the decision.
+        # If the engine upgrades non-escalation → escalation, append a short
+        # natural-language note so the reply doesn't silently contradict the
+        # escalation that's about to happen.
+        upgraded_escalation = esc_decision.escalate and not decision.escalate
+        if upgraded_escalation:
+            escalation_note = escalation_engine.build_escalation_note(esc_decision)
+            updated_reply = f"{decision.reply}\n\n{escalation_note}"
+            effective_decision = decision.model_copy(update={
+                "reply": updated_reply,
+                "escalate": True,
+                "escalation_reason": esc_decision.escalation_reason,
+            })
+        else:
+            effective_decision = decision.model_copy(update={
+                "escalate": esc_decision.escalate,
+                "escalation_reason": (
+                    esc_decision.escalation_reason or decision.escalation_reason
+                ),
+            })
+
+        logger.info(
+            "Escalation: escalate=%s level=%s cause=%s | conversation=%s",
+            esc_decision.escalate, esc_decision.escalation_level,
+            esc_decision.escalation_cause, conversation_id,
+        )
+
+        # ------------------------------------------------------------------
         # Phase 2 — Tool loop: side effects (history, KB, ticket, escalate)
-        # The decision is injected into AgentContext so send_response uses it.
+        # The effective_decision (merged LLM + escalation engine) is injected
+        # so send_response and escalate_to_human use the final verdict.
         # ------------------------------------------------------------------
         ctx = AgentContext(db=db, user_id=user_id, conversation_id=conversation_id)
-        ctx.predecided = decision  # inject: send_response will use decision.reply
+        ctx.predecided = effective_decision  # inject merged decision
 
         executor = ToolExecutor()
         client = get_openai_client()
-        messages = self._build_initial_messages(conversation_history, user_message, decision)
+        messages = self._build_initial_messages(conversation_history, user_message, effective_decision)
 
         try:
             for iteration in range(self.MAX_ITERATIONS):
@@ -191,7 +231,7 @@ class SupportAgent:
                 if not msg.tool_calls:
                     logger.warning("Tool loop: no tool calls on iteration %d", iteration)
                     if not ctx.final_response:
-                        ctx.final_response = decision.reply
+                        ctx.final_response = effective_decision.reply
                     break
 
                 messages.append({
@@ -237,39 +277,43 @@ class SupportAgent:
                     "Tool loop ended after %d iterations without send_response",
                     self.MAX_ITERATIONS,
                 )
-                ctx.final_response = decision.reply
+                ctx.final_response = effective_decision.reply
 
         except Exception as exc:  # noqa: BLE001
             logger.error("Tool loop failed: %s", exc, exc_info=True)
             # Decision engine already gave us a valid reply; continue with it.
 
         # ------------------------------------------------------------------
-        # If decision says escalate but tool loop didn't call escalate_to_human,
-        # perform it directly so the conversation status is always consistent.
+        # If effective_decision says escalate but tool loop didn't call
+        # escalate_to_human, perform it directly so conversation status is
+        # always consistent with the final escalation verdict.
         # ------------------------------------------------------------------
-        if decision.escalate and not ctx.should_escalate:
+        if effective_decision.escalate and not ctx.should_escalate:
             try:
                 from app.repositories.conversation import ConversationRepository
                 conv_repo = ConversationRepository(db)
                 await conv_repo.update(conversation_id, {"status": "escalated"})
                 ctx.should_escalate = True
-                ctx.escalation_reason = decision.escalation_reason
+                ctx.escalation_reason = effective_decision.escalation_reason
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Direct escalation update failed: %s", exc)
 
         # ------------------------------------------------------------------
-        # Build final AIResponse — decision is source of truth for reply/metadata
+        # Build final AIResponse — effective_decision is source of truth
+        # (LLM decision merged with escalation engine verdict)
         # ------------------------------------------------------------------
         return AIResponse(
-            response=decision.reply,
-            intent=decision.intent,
-            confidence=decision.confidence,
-            should_escalate=decision.escalate,
-            escalation_reason=decision.escalation_reason,
-            category=decision.category,
-            priority=decision.priority,
-            sentiment=decision.sentiment,
-            urgency=decision.urgency,
+            response=effective_decision.reply,
+            intent=effective_decision.intent,
+            confidence=effective_decision.confidence,
+            should_escalate=effective_decision.escalate,
+            escalation_reason=effective_decision.escalation_reason,
+            escalation_level=esc_decision.escalation_level,
+            escalation_cause=esc_decision.escalation_cause,
+            category=effective_decision.category,
+            priority=effective_decision.priority,
+            sentiment=effective_decision.sentiment,
+            urgency=effective_decision.urgency,
             tools_called=ctx.tools_called,
             iterations=ctx.iterations,
             kb_articles_found=ctx.kb_articles_found,

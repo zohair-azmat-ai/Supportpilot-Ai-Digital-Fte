@@ -160,6 +160,8 @@ class SupportService:
                 "model_used": settings.OPENAI_MODEL,
                 "was_escalated": ai_result.should_escalate,
                 "escalation_reason": ai_result.escalation_reason,
+                "escalation_level": getattr(ai_result, "escalation_level", "none"),
+                "escalation_cause": getattr(ai_result, "escalation_cause", None),
                 "ticket_created": ai_result.ticket_created,
                 "kb_articles_found": ai_result.kb_articles_found,
             })

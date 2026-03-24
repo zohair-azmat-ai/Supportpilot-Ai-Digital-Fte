@@ -22,6 +22,11 @@ class UrgencyCount(BaseModel):
     count: int
 
 
+class EscalationCauseCount(BaseModel):
+    cause: str
+    count: int
+
+
 class MetricsOverviewResponse(BaseModel):
     """Aggregate platform-wide AI performance metrics."""
     total_interactions: int
@@ -35,6 +40,7 @@ class MetricsOverviewResponse(BaseModel):
     top_intents: List[IntentCount]
     sentiment_breakdown: List[SentimentCount] = []
     urgency_distribution: List[UrgencyCount] = []
+    escalation_cause_breakdown: List[EscalationCauseCount] = []
 
 
 class ChannelMetric(BaseModel):

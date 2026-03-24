@@ -78,6 +78,15 @@ class TicketRepository(BaseRepository[Ticket]):
         )
         return result.scalar_one_or_none() or 0
 
+    async def get_by_conversation(self, conversation_id: str) -> List[Ticket]:
+        """Return tickets linked to a specific conversation (oldest first)."""
+        result = await self.db.execute(
+            select(Ticket)
+            .where(Ticket.conversation_id == conversation_id)
+            .order_by(Ticket.created_at.asc())
+        )
+        return list(result.scalars().all())
+
     async def get_all_paginated(
         self,
         skip: int = 0,

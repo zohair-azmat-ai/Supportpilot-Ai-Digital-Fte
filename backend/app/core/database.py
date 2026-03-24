@@ -349,6 +349,16 @@ _PATCHES = [
     ALTER TABLE agent_metrics
         ADD COLUMN IF NOT EXISTS urgency VARCHAR(50)
     """,
+
+    # escalation engine output — level and structured cause for analytics
+    """
+    ALTER TABLE agent_metrics
+        ADD COLUMN IF NOT EXISTS escalation_level VARCHAR(50)
+    """,
+    """
+    ALTER TABLE agent_metrics
+        ADD COLUMN IF NOT EXISTS escalation_cause VARCHAR(100)
+    """,
 ]
 
 
