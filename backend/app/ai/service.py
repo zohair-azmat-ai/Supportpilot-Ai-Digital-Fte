@@ -58,8 +58,9 @@ _BILLING_KEYWORDS = frozenset({
 def _build_fallback_response(user_message: str = "") -> AIResponse:
     """Return a context-aware fallback when the AI service is unreachable.
 
-    Checks four intent cases in priority order: gratitude → repeated login →
-    password → login → billing → general.  Always escalates except for gratitude.
+    Priority order: gratitude → repeated login → password → login → billing → general.
+    Simple first-contact issues (login, password) do NOT auto-escalate — troubleshoot first.
+    Escalation is reserved for repeated failures, locked accounts, billing, and security.
     """
     msg = user_message.lower()
 
@@ -95,7 +96,7 @@ def _build_fallback_response(user_message: str = "") -> AIResponse:
             escalation_reason="Multiple login attempts detected — account may be locked",
         )
 
-    # 3. Password reset / recovery
+    # 3. Password reset / recovery — troubleshoot first, no escalation on first contact
     if any(k in msg for k in _PASSWORD_KEYWORDS):
         return AIResponse(
             response=(
@@ -107,12 +108,11 @@ def _build_fallback_response(user_message: str = "") -> AIResponse:
                 "let me know and I'll assist further."
             ),
             intent="account",
-            confidence=0.5,
-            should_escalate=True,
-            escalation_reason="AI service unavailable — password recovery fallback provided",
+            confidence=0.6,
+            should_escalate=False,
         )
 
-    # 4. General login / sign-in issue
+    # 4. General login / sign-in issue — troubleshoot first, no escalation on first contact
     if any(k in msg for k in _LOGIN_KEYWORDS):
         return AIResponse(
             response=(
@@ -121,12 +121,11 @@ def _build_fallback_response(user_message: str = "") -> AIResponse:
                 "• Reset your password using the 'Forgot Password' option\n"
                 "• Check your email (including spam folder) for the reset link\n"
                 "• Try a different browser or clear your cache\n\n"
-                "If the issue continues, I'll escalate this to our support team immediately."
+                "If the issue continues, feel free to reply and I'll help you further."
             ),
             intent="account",
-            confidence=0.5,
-            should_escalate=True,
-            escalation_reason="AI service unavailable — login troubleshoot fallback provided",
+            confidence=0.6,
+            should_escalate=False,
         )
 
     # 5. Billing issue
