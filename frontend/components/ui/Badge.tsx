@@ -121,3 +121,16 @@ export function RoleBadge({ role }: { role: Role }) {
   const { variant, label } = map[role] || { variant: 'default', label: role }
   return <Badge variant={variant}>{label}</Badge>
 }
+
+export function SentimentBadge({ sentiment }: { sentiment: string | null | undefined }) {
+  if (!sentiment) return null
+  const map: Record<string, { variant: BadgeVariant; label: string }> = {
+    positive: { variant: 'success', label: '😊 Positive' },
+    negative: { variant: 'danger', label: '😞 Negative' },
+    frustrated: { variant: 'warning', label: '😤 Frustrated' },
+    neutral: { variant: 'gray', label: '😐 Neutral' },
+    urgent: { variant: 'danger', label: '🚨 Urgent' },
+  }
+  const entry = map[sentiment.toLowerCase()] || { variant: 'gray' as BadgeVariant, label: sentiment }
+  return <Badge variant={entry.variant} size="sm">{entry.label}</Badge>
+}

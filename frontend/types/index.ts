@@ -36,6 +36,9 @@ export interface Message {
   content: string
   intent: string | null
   ai_confidence: number | null
+  sentiment: string | null
+  urgency: string | null
+  escalate: boolean | null
   created_at: string
 }
 
@@ -67,6 +70,21 @@ export interface IntentCount {
   count: number
 }
 
+export interface SentimentCount {
+  sentiment: string
+  count: number
+}
+
+export interface UrgencyCount {
+  urgency: string
+  count: number
+}
+
+export interface EscalationCauseCount {
+  cause: string
+  count: number
+}
+
 export interface MetricsOverview {
   total_interactions: number
   avg_confidence: number
@@ -77,6 +95,11 @@ export interface MetricsOverview {
   avg_tools_per_run: number
   avg_iterations: number
   top_intents: IntentCount[]
+  sentiment_breakdown: SentimentCount[]
+  urgency_distribution: UrgencyCount[]
+  escalation_cause_breakdown: EscalationCauseCount[]
+  similar_issue_count: number
+  similar_issue_rate: number
 }
 
 export interface ChannelMetric {

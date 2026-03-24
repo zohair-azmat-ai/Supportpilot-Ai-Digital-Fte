@@ -6,9 +6,12 @@ import {
   AlertTriangle,
   BarChart3,
   Brain,
+  Frown,
   RefreshCw,
+  Smile,
   Ticket,
   TimerReset,
+  Zap,
 } from 'lucide-react'
 import { metricsApi } from '../../../../lib/api'
 import { ChannelMetricsResponse, MetricsOverview } from '../../../../types'
@@ -194,12 +197,25 @@ export default function AdminAnalyticsPage() {
               <span className="text-sm text-slate-400">Avg iterations</span>
               <span className="text-sm font-semibold text-slate-100">{overview.avg_iterations.toFixed(1)}</span>
             </div>
+            {overview.similar_issue_count > 0 && (
+              <div className="flex items-center justify-between border-t border-border pt-4">
+                <div className="flex items-center gap-2 text-sm text-slate-400">
+                  <Zap size={14} className="text-amber-400" />
+                  Similar issues detected
+                </div>
+                <span className="text-sm font-semibold text-amber-300">
+                  {overview.similar_issue_count} ({formatPercent(overview.similar_issue_rate, 1)})
+                </span>
+              </div>
+            )}
           </div>
         </Card>
 
         <Card title="Channel Detail" description="Confidence and response time by channel">
           <div className="space-y-4">
-            {sortedChannels.map((channel) => (
+            {sortedChannels.length === 0 ? (
+              <p className="text-sm text-slate-500">No channel data recorded yet.</p>
+            ) : sortedChannels.map((channel) => (
               <div key={channel.channel} className="rounded-xl border border-border bg-background px-4 py-3">
                 <div className="flex items-center justify-between gap-2">
                   <ChannelBadge channel={channel.channel} />
@@ -248,6 +264,60 @@ export default function AdminAnalyticsPage() {
           )}
         </Card>
       </div>
+
+      {/* Sentiment + Escalation Cause */}
+      {(overview.sentiment_breakdown?.length > 0 || overview.escalation_cause_breakdown?.length > 0) && (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {overview.sentiment_breakdown?.length > 0 && (
+            <Card title="Sentiment Breakdown" description="Customer sentiment distribution across all AI interactions">
+              <div className="space-y-3">
+                {overview.sentiment_breakdown.map((s) => {
+                  const isPositive = s.sentiment.toLowerCase() === 'positive'
+                  const isNegative = ['negative', 'frustrated'].includes(s.sentiment.toLowerCase())
+                  const Icon = isPositive ? Smile : isNegative ? Frown : Activity
+                  const color = isPositive ? 'text-emerald-400' : isNegative ? 'text-red-400' : 'text-slate-400'
+                  const bg = isPositive ? 'bg-emerald-500/10 border-emerald-500/20' : isNegative ? 'bg-red-500/10 border-red-500/20' : 'bg-background border-border'
+                  const total = overview.sentiment_breakdown.reduce((sum, x) => sum + x.count, 0)
+                  const pct = total > 0 ? Math.round((s.count / total) * 100) : 0
+                  return (
+                    <div key={s.sentiment} className={`flex items-center justify-between rounded-xl border px-4 py-3 ${bg}`}>
+                      <div className="flex items-center gap-2">
+                        <Icon size={14} className={color} />
+                        <span className="text-sm font-medium text-slate-200 capitalize">{s.sentiment}</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="h-1.5 w-20 overflow-hidden rounded-full bg-white/10">
+                          <div className={`h-full rounded-full ${isPositive ? 'bg-emerald-400' : isNegative ? 'bg-red-400' : 'bg-slate-400'}`} style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="w-8 text-right text-sm font-semibold text-slate-100">{s.count}</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </Card>
+          )}
+
+          {overview.escalation_cause_breakdown?.length > 0 && (
+            <Card title="Escalation Causes" description="Why the AI escalated conversations to human agents">
+              <div className="space-y-3">
+                {overview.escalation_cause_breakdown.map((c) => (
+                  <div key={c.cause} className="flex items-center justify-between rounded-xl border border-border bg-background px-4 py-3">
+                    <div>
+                      <p className="text-sm font-medium text-slate-200">{c.cause.replace(/_/g, ' ')}</p>
+                      <p className="text-xs text-slate-500">Escalation trigger</p>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm font-semibold text-red-300">
+                      <AlertTriangle size={13} className="text-red-400" />
+                      {c.count}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+        </div>
+      )}
     </div>
   )
 }

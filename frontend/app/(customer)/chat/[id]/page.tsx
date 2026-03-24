@@ -3,7 +3,7 @@
 import React, { useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { AlertTriangle, ArrowLeft, Brain, Layers3 } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Bot, Brain, Layers3, Tag } from 'lucide-react'
 import { useConversationDetail } from '../../../../hooks/useConversations'
 import { messagesApi } from '../../../../lib/api'
 import { ChatWindow } from '../../../../components/chat/ChatWindow'
@@ -11,7 +11,7 @@ import { ChatInput } from '../../../../components/chat/ChatInput'
 import { ChannelBadge, ConversationStatusBadge, EscalationFlag } from '../../../../components/ui/Badge'
 import { LoadingSpinner } from '../../../../components/ui/LoadingSpinner'
 import { useToast } from '../../../../context/ToastContext'
-import { formatPercent } from '../../../../lib/utils'
+import { cn, formatPercent } from '../../../../lib/utils'
 
 export default function ChatDetailPage() {
   const params = useParams()
@@ -65,6 +65,8 @@ export default function ChatDetailPage() {
       ? confidenceValues.reduce((sum, value) => sum + value, 0) / confidenceValues.length
       : null
   const isEscalated = conversation.status === 'escalated'
+  const lastAiMessage = aiMessages[aiMessages.length - 1]
+  const lastIntent = lastAiMessage?.intent ?? null
 
   return (
     <div className="mx-auto flex h-[calc(100vh-8rem)] max-w-4xl flex-col overflow-hidden rounded-2xl border border-border bg-background-surface">
@@ -89,7 +91,7 @@ export default function ChatDetailPage() {
           <div className="shrink-0 text-xs text-slate-600">{conversation.messages.length} messages</div>
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-xl border border-border/70 bg-background px-3 py-3">
             <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
               <Layers3 size={14} />
@@ -113,13 +115,30 @@ export default function ChatDetailPage() {
 
           <div className="rounded-xl border border-border/70 bg-background px-3 py-3">
             <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
+              <Tag size={14} />
+              Last Intent
+            </div>
+            <p className="mt-2 text-sm font-semibold text-slate-100">
+              {lastIntent ? lastIntent.replace(/_/g, ' ') : 'None detected'}
+            </p>
+            <p className="text-xs text-slate-500">Most recent AI-detected intent</p>
+          </div>
+
+          <div className={cn(
+            'rounded-xl border px-3 py-3',
+            isEscalated ? 'border-red-500/30 bg-red-500/10' : 'border-border/70 bg-background'
+          )}>
+            <div className={cn(
+              'flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em]',
+              isEscalated ? 'text-red-400' : 'text-slate-500'
+            )}>
               <AlertTriangle size={14} />
               Escalation
             </div>
             <p className="mt-2 text-lg font-semibold text-slate-100">
               {isEscalated ? 'Human follow-up required' : 'AI handling actively'}
             </p>
-            <p className="text-xs text-slate-500">
+            <p className={cn('text-xs', isEscalated ? 'text-red-300/70' : 'text-slate-500')}>
               {isEscalated ? 'Flagged for human review' : 'No escalation flag on this conversation'}
             </p>
           </div>
