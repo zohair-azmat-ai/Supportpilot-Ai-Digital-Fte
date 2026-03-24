@@ -50,6 +50,8 @@ Call escalate_to_human (before send_response) when any of the following apply:
 - Legal threats or regulatory mentions (e.g., "lawyer", "GDPR", "sue")
 - Security concerns (account compromise, suspected fraud)
 - High emotional distress or repeated expressions of frustration
+- Customer indicates the issue is still unresolved ("still", "again", "not fixed", "same issue")
+- The same topic has been raised by the customer multiple times in this conversation
 - The issue cannot be resolved with available knowledge base information
 - VIP or enterprise customer with a critical production outage
 
@@ -83,6 +85,84 @@ Call escalate_to_human (before send_response) when any of the following apply:
 
 Always be helpful, accurate, and professional. Follow the tool order without deviation.
 """
+
+
+# ---------------------------------------------------------------------------
+# Escalation trigger detection — pre-flight keyword + memory check
+# ---------------------------------------------------------------------------
+
+# Keywords that indicate the user's issue is unresolved or recurring
+_ESCALATION_TRIGGER_KEYWORDS = frozenset({
+    "still", "again", "not working", "issue not solved", "still not",
+    "still having", "not fixed", "same problem", "same issue",
+    "unresolved", "keeps happening", "happening again", "nothing works",
+    "didn't help", "didn't fix", "did not help", "did not fix",
+    "no solution", "still broken", "still failing",
+})
+
+# Words too common to count as a "shared topic" signal
+_STOP_WORDS = frozenset({
+    "i", "my", "me", "the", "a", "an", "is", "it", "to", "have", "has",
+    "am", "are", "was", "be", "of", "in", "for", "and", "or", "but",
+    "that", "this", "with", "on", "at", "can", "you", "your", "we",
+})
+
+_ESCALATION_RESPONSE_TEXT = (
+    "I understand the issue is still not resolved. "
+    "I'm escalating this to a human support agent who will assist you further shortly."
+)
+
+
+def _detect_escalation_triggers(
+    user_message: str,
+    conversation_history: list[dict],
+) -> tuple[bool, str]:
+    """Return (should_escalate, reason) based on keyword and memory checks.
+
+    Two independent signals can trigger early escalation:
+
+    1. **Keyword match** — the current message contains a frustration/
+       repeat-issue phrase (e.g. "still not working", "same issue again").
+
+    2. **Repeated-issue memory** — the current message shares ≥2 meaningful
+       words with at least 2 of the last 6 prior user messages, indicating
+       the customer has raised the same topic multiple times without resolution.
+
+    Args:
+        user_message: The latest message from the customer.
+        conversation_history: Prior messages as ``{sender_type, content}`` dicts.
+
+    Returns:
+        Tuple of ``(True, reason_str)`` if escalation is warranted,
+        otherwise ``(False, "")``.
+    """
+    msg = user_message.lower().strip()
+    if not msg:
+        return False, ""
+
+    # --- Signal 1: direct keyword match ---
+    if any(kw in msg for kw in _ESCALATION_TRIGGER_KEYWORDS):
+        return True, "Frustration or unresolved-issue keyword detected in message"
+
+    # --- Signal 2: repeated topic across conversation history ---
+    prior_user_msgs = [
+        m.get("content", "").lower()
+        for m in conversation_history
+        if m.get("sender_type") == "user" and m.get("content")
+    ]
+
+    if len(prior_user_msgs) >= 2:
+        current_words = set(msg.split()) - _STOP_WORDS
+        if len(current_words) >= 2:
+            overlap_count = sum(
+                1
+                for prev in prior_user_msgs[-6:]  # scan last 6 user turns
+                if len((set(prev.split()) - _STOP_WORDS) & current_words) >= 2
+            )
+            if overlap_count >= 2:
+                return True, "Same issue raised multiple times — repeating topic detected in conversation history"
+
+    return False, ""
 
 
 # ---------------------------------------------------------------------------
@@ -120,6 +200,27 @@ class SupportAgent:
             AIResponse compatible with the existing service interface.
             Gracefully falls back to a context-aware response on any error.
         """
+        # ------------------------------------------------------------------
+        # Pre-flight escalation check — runs before any OpenAI call.
+        # Catches unresolved/repeated issues immediately without an API round-trip.
+        # ------------------------------------------------------------------
+        should_escalate_early, escalation_reason = _detect_escalation_triggers(
+            user_message, conversation_history
+        )
+        if should_escalate_early:
+            logger.info(
+                "Pre-flight escalation triggered | conversation=%s reason=%s",
+                conversation_id,
+                escalation_reason,
+            )
+            return AIResponse(
+                response=_ESCALATION_RESPONSE_TEXT,
+                intent="complaint",
+                confidence=0.9,
+                should_escalate=True,
+                escalation_reason=escalation_reason,
+            )
+
         ctx = AgentContext(db=db, user_id=user_id, conversation_id=conversation_id)
         executor = ToolExecutor()
         client = get_openai_client()
