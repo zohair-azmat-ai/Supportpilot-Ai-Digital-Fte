@@ -4,8 +4,8 @@ import React from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { LucideIcon, Zap, LogOut, X } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { getInitials } from '@/lib/utils'
+import { cn } from '../../lib/utils'
+import { getInitials } from '../../lib/utils'
 import { User } from '@/types'
 
 interface NavItem {

@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { Ticket, TicketPriority, TicketStatus } from '@/types'
-import { ticketsApi } from '@/lib/api'
+import { ticketsApi } from '../lib/api'
 
 export function useTickets() {
   const [tickets, setTickets] = useState<Ticket[]>([])

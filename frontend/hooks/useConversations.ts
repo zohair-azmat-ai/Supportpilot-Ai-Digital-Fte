@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { Conversation, ConversationDetail, Message } from '@/types'
-import { conversationsApi, messagesApi } from '@/lib/api'
+import { conversationsApi, messagesApi } from '../lib/api'
 
 export function useConversations() {
   const [conversations, setConversations] = useState<Conversation[]>([])

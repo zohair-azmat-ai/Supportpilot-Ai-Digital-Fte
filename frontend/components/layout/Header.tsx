@@ -2,8 +2,8 @@
 
 import React from 'react'
 import { Menu, Bell, LogOut } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { getInitials } from '@/lib/utils'
+import { cn } from '../../lib/utils'
+import { getInitials } from '../../lib/utils'
 import { User } from '@/types'
 
 interface HeaderProps {

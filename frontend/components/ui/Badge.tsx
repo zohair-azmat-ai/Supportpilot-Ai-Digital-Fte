@@ -1,6 +1,6 @@
 import React from 'react'
 import { Globe, Mail, MessageCircleMore, AlertTriangle, LucideIcon } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn } from '../../lib/utils'
 import { TicketStatus, TicketPriority, ConversationStatus, Channel, Role } from '@/types'
 
 type BadgeVariant =

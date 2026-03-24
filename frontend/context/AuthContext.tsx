@@ -2,14 +2,14 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { User, Role } from '@/types'
-import { authApi } from '@/lib/api'
+import { authApi } from '../lib/api'
 import {
   getToken,
   setToken,
   setStoredUser,
   getStoredUser,
   clearAuth,
-} from '@/lib/auth'
+} from '../lib/auth'
 
 interface AuthContextValue {
   user: User | null

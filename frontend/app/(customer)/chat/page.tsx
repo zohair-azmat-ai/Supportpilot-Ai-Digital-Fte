@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/Button'
 import { ChannelBadge, ConversationStatusBadge, EscalationFlag } from '@/components/ui/Badge'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { formatRelativeDate } from '@/lib/utils'
+import { formatRelativeDate } from '../../../lib/utils'
 import { useToast } from '@/context/ToastContext'
 
 export default function ConversationsPage() {

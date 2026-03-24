@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/Input'
 import { Textarea } from '@/components/ui/Textarea'
 import { Select } from '@/components/ui/Select'
 import { Button } from '@/components/ui/Button'
-import { supportApi } from '@/lib/api'
+import { supportApi } from '../../lib/api'
 import { SupportSubmitResponse, TicketPriority } from '@/types'
 
 const schema = z.object({

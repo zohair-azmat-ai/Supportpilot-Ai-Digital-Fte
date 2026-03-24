@@ -14,14 +14,14 @@ import {
   BarChart3,
   TrendingUp,
 } from 'lucide-react'
-import { adminApi } from '@/lib/api'
+import { adminApi } from '../../../lib/api'
 import { AdminStats, Ticket as TicketType, Conversation } from '@/types'
 import { StatsCard } from '@/components/dashboard/StatsCard'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge, PriorityBadge, ConversationStatusBadge, ChannelBadge } from '@/components/ui/Badge'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
-import { formatDate, truncate, formatRelativeDate } from '@/lib/utils'
+import { formatDate, truncate, formatRelativeDate } from '../../../lib/utils'
 import { useToast } from '@/context/ToastContext'
 
 export default function AdminOverviewPage() {

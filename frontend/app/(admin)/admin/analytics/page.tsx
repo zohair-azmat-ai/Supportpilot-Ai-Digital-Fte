@@ -10,14 +10,14 @@ import {
   Ticket,
   TimerReset,
 } from 'lucide-react'
-import { metricsApi } from '@/lib/api'
+import { metricsApi } from '../../../../lib/api'
 import { ChannelMetricsResponse, MetricsOverview } from '@/types'
 import { StatsCard } from '@/components/dashboard/StatsCard'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { ChannelBadge } from '@/components/ui/Badge'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
-import { formatMs, formatPercent } from '@/lib/utils'
+import { formatMs, formatPercent } from '../../../../lib/utils'
 
 function ChannelBars({
   channels,

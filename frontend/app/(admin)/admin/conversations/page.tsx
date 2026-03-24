@@ -3,14 +3,14 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { RefreshCw, MessageCircle, ExternalLink, AlertTriangle, Layers3 } from 'lucide-react'
-import { adminApi } from '@/lib/api'
+import { adminApi } from '../../../../lib/api'
 import { Conversation, ConversationStatus, Channel } from '@/types'
 import { ConversationStatusBadge, ChannelBadge, EscalationFlag } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { formatDate, formatRelativeDate } from '@/lib/utils'
-import { cn } from '@/lib/utils'
+import { formatDate, formatRelativeDate } from '../../../../lib/utils'
+import { cn } from '../../../../lib/utils'
 
 const STATUS_FILTERS: { label: string; value: ConversationStatus | 'all' }[] = [
   { label: 'All', value: 'all' },

@@ -1,6 +1,6 @@
 import React from 'react'
 import { LucideIcon, Loader2 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn } from '../../lib/utils'
 
 type Variant = 'primary' | 'secondary' | 'danger' | 'outline' | 'ghost'
 type Size = 'sm' | 'md' | 'lg'

@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
 import { useAuth } from '@/hooks/useAuth'
 import { Role } from '@/types'
-import { cn } from '@/lib/utils'
+import { cn } from '../../../lib/utils'
 
 const schema = z
   .object({

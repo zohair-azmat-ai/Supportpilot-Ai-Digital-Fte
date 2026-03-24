@@ -3,7 +3,7 @@
 import React from 'react'
 import { Ticket, TicketStatus } from '@/types'
 import { StatusBadge, PriorityBadge, Badge } from '@/components/ui/Badge'
-import { formatDate, truncate } from '@/lib/utils'
+import { formatDate, truncate } from '../../lib/utils'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Ticket as TicketIcon } from 'lucide-react'
