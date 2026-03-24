@@ -2,9 +2,9 @@
 
 import React from 'react'
 import { User, Mail, Shield, Bell } from 'lucide-react'
-import { useAuth } from '@/hooks/useAuth'
-import { Card } from '@/components/ui/Card'
-import { RoleBadge } from '@/components/ui/Badge'
+import { useAuth } from '../../../hooks/useAuth'
+import { Card } from '../../../components/ui/Card'
+import { RoleBadge } from '../../../components/ui/Badge'
 import { formatDate, getInitials } from '../../../lib/utils'
 
 export default function SettingsPage() {

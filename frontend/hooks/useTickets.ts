@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
-import { Ticket, TicketPriority, TicketStatus } from '@/types'
+import { Ticket, TicketPriority, TicketStatus } from '../types'
 import { ticketsApi } from '../lib/api'
 
 export function useTickets() {

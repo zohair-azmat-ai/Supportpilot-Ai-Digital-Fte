@@ -2,9 +2,9 @@
 
 import React from 'react'
 import { HeadphonesIcon, Shield, Zap, Clock } from 'lucide-react'
-import { SupportForm } from '@/components/forms/SupportForm'
-import { useAuth } from '@/hooks/useAuth'
-import { Card } from '@/components/ui/Card'
+import { SupportForm } from '../../../components/forms/SupportForm'
+import { useAuth } from '../../../hooks/useAuth'
+import { Card } from '../../../components/ui/Card'
 
 const highlights = [
   {

@@ -3,11 +3,11 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { RefreshCw, Users as UsersIcon, Search } from 'lucide-react'
 import { adminApi } from '../../../../lib/api'
-import { User } from '@/types'
-import { RoleBadge } from '@/components/ui/Badge'
-import { Button } from '@/components/ui/Button'
-import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
-import { EmptyState } from '@/components/ui/EmptyState'
+import { User } from '../../../../types'
+import { RoleBadge } from '../../../../components/ui/Badge'
+import { Button } from '../../../../components/ui/Button'
+import { LoadingSpinner } from '../../../../components/ui/LoadingSpinner'
+import { EmptyState } from '../../../../components/ui/EmptyState'
 import { formatDate, getInitials } from '../../../../lib/utils'
 
 export default function AdminUsersPage() {

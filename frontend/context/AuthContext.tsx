@@ -1,7 +1,7 @@
 'use client'
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
-import { User, Role } from '@/types'
+import { User, Role } from '../types'
 import { authApi } from '../lib/api'
 import {
   getToken,

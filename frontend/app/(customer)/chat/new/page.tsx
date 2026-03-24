@@ -2,8 +2,8 @@
 
 import React, { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useConversations } from '@/hooks/useConversations'
-import { PageLoader } from '@/components/ui/LoadingSpinner'
+import { useConversations } from '../../../../hooks/useConversations'
+import { PageLoader } from '../../../../components/ui/LoadingSpinner'
 
 export default function NewChatPage() {
   const router = useRouter()

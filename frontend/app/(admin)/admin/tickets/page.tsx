@@ -3,9 +3,9 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { RefreshCw, Filter } from 'lucide-react'
 import { adminApi } from '../../../../lib/api'
-import { Ticket, TicketStatus, TicketPriority } from '@/types'
-import { TicketTable } from '@/components/tickets/TicketTable'
-import { Button } from '@/components/ui/Button'
+import { Ticket, TicketStatus, TicketPriority } from '../../../../types'
+import { TicketTable } from '../../../../components/tickets/TicketTable'
+import { Button } from '../../../../components/ui/Button'
 import { cn } from '../../../../lib/utils'
 
 const STATUS_FILTERS: { label: string; value: TicketStatus | 'all' }[] = [

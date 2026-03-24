@@ -1,9 +1,9 @@
 import React from 'react'
 import Link from 'next/link'
-import { Ticket } from '@/types'
-import { StatusBadge, PriorityBadge } from '@/components/ui/Badge'
+import { Ticket } from '../../types'
+import { StatusBadge, PriorityBadge } from '../ui/Badge'
 import { formatRelativeDate, truncate } from '../../lib/utils'
-import { EmptyState } from '@/components/ui/EmptyState'
+import { EmptyState } from '../ui/EmptyState'
 import { Ticket as TicketIcon, ArrowRight } from 'lucide-react'
 
 interface RecentTicketsProps {

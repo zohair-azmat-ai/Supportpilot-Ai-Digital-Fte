@@ -10,9 +10,9 @@ import {
   HeadphonesIcon,
   Settings,
 } from 'lucide-react'
-import { DashboardLayout } from '@/components/layout/DashboardLayout'
-import { useAuth } from '@/hooks/useAuth'
-import { PageLoader } from '@/components/ui/LoadingSpinner'
+import { DashboardLayout } from '../../components/layout/DashboardLayout'
+import { useAuth } from '../../hooks/useAuth'
+import { PageLoader } from '../../components/ui/LoadingSpinner'
 
 const navItems = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },

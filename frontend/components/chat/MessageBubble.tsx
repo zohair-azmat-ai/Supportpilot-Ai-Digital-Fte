@@ -1,9 +1,9 @@
 import React from 'react'
 import { Bot, User as UserIcon } from 'lucide-react'
-import { Channel, Message } from '@/types'
+import { Channel, Message } from '../../types'
 import { formatRelativeDate, capitalize } from '../../lib/utils'
 import { cn } from '../../lib/utils'
-import { ChannelBadge, EscalationFlag } from '@/components/ui/Badge'
+import { ChannelBadge, EscalationFlag } from '../ui/Badge'
 
 interface MessageBubbleProps {
   message: Message

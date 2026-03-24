@@ -7,9 +7,9 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { AlertCircle, LogIn } from 'lucide-react'
-import { Input } from '@/components/ui/Input'
-import { Button } from '@/components/ui/Button'
-import { useAuth } from '@/hooks/useAuth'
+import { Input } from '../../../components/ui/Input'
+import { Button } from '../../../components/ui/Button'
+import { useAuth } from '../../../hooks/useAuth'
 
 const schema = z.object({
   email: z.string().email('Invalid email address'),

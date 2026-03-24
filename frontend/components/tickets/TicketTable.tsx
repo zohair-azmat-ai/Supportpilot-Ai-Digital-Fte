@@ -1,11 +1,11 @@
 'use client'
 
 import React from 'react'
-import { Ticket, TicketStatus } from '@/types'
-import { StatusBadge, PriorityBadge, Badge } from '@/components/ui/Badge'
+import { Ticket, TicketStatus } from '../../types'
+import { StatusBadge, PriorityBadge, Badge } from '../ui/Badge'
 import { formatDate, truncate } from '../../lib/utils'
-import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
-import { EmptyState } from '@/components/ui/EmptyState'
+import { LoadingSpinner } from '../ui/LoadingSpinner'
+import { EmptyState } from '../ui/EmptyState'
 import { Ticket as TicketIcon } from 'lucide-react'
 
 interface TicketTableProps {

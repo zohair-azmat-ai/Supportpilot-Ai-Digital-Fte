@@ -12,17 +12,17 @@ import {
   MessageSquarePlus,
   Ticket,
 } from 'lucide-react'
-import { useAuth } from '@/hooks/useAuth'
-import { useTickets } from '@/hooks/useTickets'
-import { useConversations } from '@/hooks/useConversations'
-import { useToast } from '@/context/ToastContext'
-import { StatsCard } from '@/components/dashboard/StatsCard'
-import { RecentTickets } from '@/components/dashboard/RecentTickets'
-import { Card } from '@/components/ui/Card'
-import { Button } from '@/components/ui/Button'
-import { ChannelBadge, ConversationStatusBadge } from '@/components/ui/Badge'
+import { useAuth } from '../../../hooks/useAuth'
+import { useTickets } from '../../../hooks/useTickets'
+import { useConversations } from '../../../hooks/useConversations'
+import { useToast } from '../../../context/ToastContext'
+import { StatsCard } from '../../../components/dashboard/StatsCard'
+import { RecentTickets } from '../../../components/dashboard/RecentTickets'
+import { Card } from '../../../components/ui/Card'
+import { Button } from '../../../components/ui/Button'
+import { ChannelBadge, ConversationStatusBadge } from '../../../components/ui/Badge'
 import { formatRelativeDate } from '../../../lib/utils'
-import { Conversation } from '@/types'
+import { Conversation } from '../../../types'
 
 export default function DashboardPage() {
   const { user } = useAuth()

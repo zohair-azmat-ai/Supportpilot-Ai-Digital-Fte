@@ -1,6 +1,6 @@
 import React from 'react'
-import { Ticket } from '@/types'
-import { StatusBadge, PriorityBadge, Badge } from '@/components/ui/Badge'
+import { Ticket } from '../../types'
+import { StatusBadge, PriorityBadge, Badge } from '../ui/Badge'
 import { formatRelativeDate, truncate } from '../../lib/utils'
 import { cn } from '../../lib/utils'
 import { Clock } from 'lucide-react'

@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import { LucideIcon } from 'lucide-react'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
-import { User } from '@/types'
+import { User } from '../../types'
 
 interface NavItem {
   label: string

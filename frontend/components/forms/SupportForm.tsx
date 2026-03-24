@@ -6,12 +6,12 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { CheckCircle, MessageSquare, Ticket, ArrowRight, AlertCircle, RotateCcw } from 'lucide-react'
 import Link from 'next/link'
-import { Input } from '@/components/ui/Input'
-import { Textarea } from '@/components/ui/Textarea'
-import { Select } from '@/components/ui/Select'
-import { Button } from '@/components/ui/Button'
+import { Input } from '../ui/Input'
+import { Textarea } from '../ui/Textarea'
+import { Select } from '../ui/Select'
+import { Button } from '../ui/Button'
 import { supportApi } from '../../lib/api'
-import { SupportSubmitResponse, TicketPriority } from '@/types'
+import { SupportSubmitResponse, TicketPriority } from '../../types'
 
 const schema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),

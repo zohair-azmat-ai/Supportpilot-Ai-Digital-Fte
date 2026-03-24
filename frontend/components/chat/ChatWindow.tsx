@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef } from 'react'
 import { Bot, MessageCircle } from 'lucide-react'
-import { Channel, Message } from '@/types'
+import { Channel, Message } from '../../types'
 import { MessageBubble } from './MessageBubble'
 
 interface ChatWindowProps {
