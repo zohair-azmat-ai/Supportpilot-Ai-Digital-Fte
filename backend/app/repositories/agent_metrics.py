@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
-from sqlalchemy import Float, func, select
+from sqlalchemy import case, func, select
 
 from app.models.agent_metrics import AgentMetrics
 from app.repositories.base import BaseRepository
@@ -123,7 +123,7 @@ class AgentMetricsRepository(BaseRepository[AgentMetrics]):
                 func.avg(AgentMetrics.confidence_score).label("avg_confidence"),
                 func.avg(AgentMetrics.response_time_ms).label("avg_response_ms"),
                 func.sum(
-                    func.cast(AgentMetrics.was_escalated, Float)
+                    case((AgentMetrics.was_escalated == True, 1), else_=0)  # noqa: E712
                 ).label("escalation_sum"),
             )
             .group_by(AgentMetrics.channel)
