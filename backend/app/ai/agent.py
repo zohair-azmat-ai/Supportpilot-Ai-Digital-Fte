@@ -19,7 +19,7 @@ import logging
 from typing import Any
 
 from app.ai.client import get_openai_client
-from app.ai.service import AIResponse
+from app.ai.service import AIResponse, _build_fallback_response
 from app.ai.tools import TOOL_DEFINITIONS, AgentContext, ToolExecutor
 from app.core.config import settings
 
@@ -86,23 +86,6 @@ Always be helpful, accurate, and professional. Follow the tool order without dev
 
 
 # ---------------------------------------------------------------------------
-# Fallback response used on complete agent failure
-# ---------------------------------------------------------------------------
-
-_FALLBACK_RESPONSE = AIResponse(
-    response=(
-        "Thank you for reaching out to SupportPilot. I'm experiencing a temporary issue "
-        "and am unable to process your request right now. A support agent will follow up "
-        "with you shortly. We apologise for any inconvenience."
-    ),
-    intent="general",
-    confidence=0.0,
-    should_escalate=True,
-    escalation_reason="AI agent unavailable — escalating to human agent",
-)
-
-
-# ---------------------------------------------------------------------------
 # SupportAgent — main entry point
 # ---------------------------------------------------------------------------
 
@@ -135,7 +118,7 @@ class SupportAgent:
 
         Returns:
             AIResponse compatible with the existing service interface.
-            Gracefully falls back to _FALLBACK_RESPONSE on any error.
+            Gracefully falls back to a context-aware response on any error.
         """
         ctx = AgentContext(db=db, user_id=user_id, conversation_id=conversation_id)
         executor = ToolExecutor()
@@ -227,7 +210,7 @@ class SupportAgent:
                     "using fallback",
                     self.MAX_ITERATIONS,
                 )
-                return _FALLBACK_RESPONSE
+                return _build_fallback_response(user_message)
 
             return AIResponse(
                 response=ctx.final_response,
@@ -243,7 +226,7 @@ class SupportAgent:
 
         except Exception as exc:  # noqa: BLE001
             logger.error("SupportAgent.run() failed: %s", exc, exc_info=True)
-            return _FALLBACK_RESPONSE
+            return _build_fallback_response(user_message)
 
     def _build_initial_messages(
         self,

@@ -32,19 +32,54 @@ class AIResponse:
     ticket_created: bool = False
 
 
-# Fallback response used when OpenAI is unreachable or returns invalid data
-_FALLBACK_RESPONSE = AIResponse(
-    response=(
-        "Thank you for reaching out to SupportPilot. I'm experiencing a "
-        "temporary issue and am unable to process your request right now. "
-        "A support agent will follow up with you shortly. We apologise for "
-        "any inconvenience."
-    ),
-    intent="general",
-    confidence=0.0,
-    should_escalate=True,
-    escalation_reason="AI service unavailable — escalating to human agent",
-)
+_LOGIN_KEYWORDS = frozenset({
+    "login", "log in", "sign in", "signin", "password", "forgot password",
+    "reset password", "account", "credentials", "locked out", "access",
+})
+_BILLING_KEYWORDS = frozenset({
+    "payment", "refund", "billing", "charge", "charged", "invoice",
+    "subscription", "billed", "transaction", "receipt", "money", "fee",
+})
+
+
+def _build_fallback_response(user_message: str = "") -> AIResponse:
+    """Return a context-aware fallback when the AI service is unreachable.
+
+    Keyword-matches the user message to pick a relevant reply instead of
+    the generic "temporary issue" string.  Always sets should_escalate=True
+    so a human agent is notified when the AI is unavailable.
+    """
+    msg = user_message.lower()
+
+    if any(k in msg for k in _LOGIN_KEYWORDS):
+        response = (
+            "I understand you're facing a login issue. Let me help you troubleshoot this. "
+            "Please try resetting your password or checking your credentials. "
+            "If the issue continues, I will escalate this to a human support agent immediately."
+        )
+        intent = "account"
+    elif any(k in msg for k in _BILLING_KEYWORDS):
+        response = (
+            "I see you're having a billing-related issue. Let me assist you with this. "
+            "Please check your payment status or recent transactions. "
+            "If needed, I can escalate this to our billing team."
+        )
+        intent = "billing"
+    else:
+        response = (
+            "Thank you for reaching out. I'm here to help you with your request. "
+            "Let me analyze your issue and provide the best possible solution. "
+            "If needed, I will connect you with a human agent."
+        )
+        intent = "general"
+
+    return AIResponse(
+        response=response,
+        intent=intent,
+        confidence=0.4,
+        should_escalate=True,
+        escalation_reason="AI service unavailable — context-aware fallback provided",
+    )
 
 
 class AIService:
@@ -107,7 +142,7 @@ class AIService:
             logger.warning("Failed to parse AI JSON response: %s | raw=%r", exc, raw)
             # Return a basic response using the raw text
             return AIResponse(
-                response=raw or _FALLBACK_RESPONSE.response,
+                response=raw or _build_fallback_response().response,
                 intent="general",
                 confidence=0.5,
                 should_escalate=False,
@@ -145,10 +180,10 @@ class AIService:
 
         except (APIError, APITimeoutError) as exc:
             logger.error("OpenAI API error: %s", exc)
-            return _FALLBACK_RESPONSE
+            return _build_fallback_response(user_message)
         except Exception as exc:  # noqa: BLE001
             logger.error("Unexpected error calling OpenAI: %s", exc)
-            return _FALLBACK_RESPONSE
+            return _build_fallback_response(user_message)
 
 
 # Module-level singleton
