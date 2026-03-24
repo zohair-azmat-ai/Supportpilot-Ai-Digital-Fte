@@ -20,7 +20,7 @@ google-auth-httplib2==0.2.0
 google-auth-oauthlib==1.2.1
 
 # ── WhatsApp / Twilio integration ────────────────────────────────────────────
-# Required when TWILIO_ENABLED=true
+# Required when Twilio WhatsApp credentials are configured
 twilio==9.3.8
 
 # ── Kafka (production only — not required for local dev when USE_KAFKA=false) ─

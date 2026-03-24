@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import logging
 import secrets
+import re
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,6 +38,18 @@ from app.repositories.customer import CustomerRepository
 from app.repositories.user import UserRepository
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_identifier(channel: str, value: str) -> str:
+    """Canonicalize identifiers before looking up customer identities."""
+    cleaned = value.strip()
+    if channel in ("web", "email"):
+        return cleaned.lower()
+    if channel == "whatsapp":
+        cleaned = cleaned.replace("whatsapp:", "").strip()
+        digits = re.sub(r"[^\d+]", "", cleaned)
+        return digits if digits.startswith("+") else f"+{digits}"
+    return cleaned
 
 
 class ChannelIdentityService:
@@ -65,6 +78,7 @@ class ChannelIdentityService:
         """
         customer_repo = CustomerRepository(db)
         user_repo = UserRepository(db)
+        identifier_value = _normalize_identifier(channel, identifier_value)
 
         # 1. Try to resolve via CustomerIdentifier
         customer = await customer_repo.get_by_identifier(channel, identifier_value)

@@ -120,7 +120,7 @@ This is not a tutorial project or a hackathon demo. It is a **production-style m
 | **Event-Driven Bus** | InMemoryEventBus for dev · KafkaEventBus for prod — zero code change to switch |
 | **Knowledge Base** | Keyword-searchable articles with pgvector-ready `embedding` field for Phase 2 RAG |
 | **Agent Metrics** | Every AI call logged: intent, confidence, tools, response time, escalation status |
-| **Multi-Channel** | Web live · Gmail scaffolded · WhatsApp scaffolded — activate with credentials only |
+| **Multi-Channel** | Web live · Gmail activation-ready · WhatsApp live via Twilio Sandbox/API |
 
 ---
 
@@ -239,7 +239,7 @@ Every inbound message — regardless of origin — is normalised into a shared `
 | **Web Chat** | ✅ Live | `POST /api/v1/conversations/{id}/messages` |
 | **Web Support Form** | ✅ Live | `POST /api/v1/support/submit` |
 | **Gmail / Email** | 🟡 Activation-ready | `POST /api/v1/channels/email/inbound` — set `GMAIL_ENABLED=true` + credentials |
-| **WhatsApp** | 🟡 Activation-ready | `POST /api/v1/channels/whatsapp/inbound` — set `TWILIO_ENABLED=true` + credentials |
+| **WhatsApp** | ✅ Live via Twilio | `POST /api/v1/channels/whatsapp/inbound` — set Twilio credentials and webhook |
 
 **Unified customer identity across channels:**
 
@@ -257,8 +257,19 @@ Every inbound message — regardless of origin — is normalised into a shared `
 **Safe when credentials are absent:**
 
 - `GMAIL_ENABLED=false` (default) — webhook returns `503`, polling skips silently; app starts normally
-- `TWILIO_ENABLED=false` (default) — webhook returns `503`; no crash, no startup warning
-- Both channels log a clear message when send_response is called without credentials
+- Missing Twilio credentials — backend still starts, WhatsApp webhook returns `503`, and outbound sends are logged instead of crashing
+- Partial Twilio config logs a startup warning so local/dev stays safe
+
+**Twilio WhatsApp setup:**
+
+1. Create a Twilio account and open WhatsApp Sandbox, or provision a production WhatsApp sender.
+2. Point the inbound webhook to `https://<your-backend>/api/v1/channels/whatsapp/inbound`.
+3. Optional: point the status callback to `https://<your-backend>/api/v1/channels/whatsapp/status`.
+4. Set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_WHATSAPP_FROM`.
+5. For sandbox usage, the customer must join the sandbox first from Twilio's provided join code.
+
+Sandbox vs production:
+Twilio Sandbox is fastest for local/dev validation. Production WhatsApp requires Twilio/Meta approval and a real WhatsApp-enabled sender. Twilio credentials are required for real inbound and outbound WhatsApp traffic.
 
 **Adding a new channel requires only one file:**
 
@@ -424,6 +435,10 @@ Handles venv, install, migrations, and seeding in one step.
 | `ENVIRONMENT` | ✅ | Runtime flag | `development` or `production` |
 | `USE_KAFKA` | — | Event bus mode | `false` dev · `true` prod |
 | `KAFKA_BOOTSTRAP_SERVERS` | If Kafka | Kafka broker address | `localhost:9092` |
+| `TWILIO_ACCOUNT_SID` | For WhatsApp | Twilio account SID | `ACxxxxxxxx...` |
+| `TWILIO_AUTH_TOKEN` | For WhatsApp | Twilio auth token | `your-token` |
+| `TWILIO_WHATSAPP_FROM` | For WhatsApp | WhatsApp-enabled Twilio sender | `whatsapp:+14155238886` |
+| `TWILIO_WHATSAPP_STATUS_CALLBACK` | Optional | Delivery callback URL | `https://api.example.com/api/v1/channels/whatsapp/status` |
 
 ### Frontend — `frontend/.env.local`
 
@@ -498,7 +513,8 @@ All endpoints are prefixed with `/api/v1`. &nbsp; Interactive docs → [`/docs`]
 | `GET` | `/metrics/escalations` | 👑 | Escalation records and rates |
 | `GET` | `/metrics/events` | 👑 | Event log analytics (by type, channel, intent) |
 | `POST` | `/channels/email/inbound` | Public | Gmail Pub/Sub webhook (GMAIL_ENABLED) |
-| `POST` | `/channels/whatsapp/inbound` | Public | Twilio WhatsApp webhook (TWILIO_ENABLED) |
+| `POST` | `/channels/whatsapp/inbound` | Public | Twilio WhatsApp inbound webhook |
+| `POST` | `/channels/whatsapp/status` | Public | Twilio WhatsApp delivery callback |
 
 > Full request/response schemas → [docs/api-spec.md](docs/api-spec.md)
 

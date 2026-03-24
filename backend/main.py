@@ -57,6 +57,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception as exc:
             logger.warning("Gmail poller failed to start (non-fatal): %s", exc)
 
+    if settings.twilio_partial_config:
+        logger.warning(
+            "Twilio WhatsApp credentials are partially configured. "
+            "Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_WHATSAPP_FROM "
+            "to enable inbound and outbound WhatsApp safely."
+        )
+    elif settings.twilio_configured:
+        logger.info("Twilio WhatsApp integration configured")
+    else:
+        logger.info("Twilio WhatsApp integration not configured; webhook stays disabled")
+
     yield  # Application is running
 
     # Stop Gmail poller

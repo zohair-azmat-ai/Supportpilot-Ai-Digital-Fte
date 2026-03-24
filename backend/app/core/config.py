@@ -58,6 +58,7 @@ class Settings(BaseSettings):
     TWILIO_AUTH_TOKEN: str = ""
     # Twilio sends from whatsapp:+14155238886 (sandbox) or your production number
     TWILIO_WHATSAPP_FROM: str = "whatsapp:+14155238886"
+    TWILIO_WHATSAPP_STATUS_CALLBACK: str = ""
 
     # App
     ENVIRONMENT: str = "development"
@@ -90,6 +91,25 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return [origin.strip() for origin in v.split(",") if origin.strip()]
         return v
+
+    @property
+    def twilio_configured(self) -> bool:
+        """Return True when all required Twilio WhatsApp credentials are present."""
+        return bool(
+            self.TWILIO_ACCOUNT_SID.strip()
+            and self.TWILIO_AUTH_TOKEN.strip()
+            and self.TWILIO_WHATSAPP_FROM.strip()
+        )
+
+    @property
+    def twilio_partial_config(self) -> bool:
+        """Return True when some, but not all, Twilio credentials are configured."""
+        values = [
+            self.TWILIO_ACCOUNT_SID.strip(),
+            self.TWILIO_AUTH_TOKEN.strip(),
+            self.TWILIO_WHATSAPP_FROM.strip(),
+        ]
+        return any(values) and not all(values)
 
 
 settings = Settings()

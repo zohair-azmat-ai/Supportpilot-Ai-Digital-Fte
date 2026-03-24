@@ -85,6 +85,22 @@ class ConversationRepository(BaseRepository[Conversation]):
         )
         return result.scalars().first()
 
+    async def get_by_thread_id_channel(
+        self,
+        thread_id: str,
+        channel: str,
+    ) -> Optional[Conversation]:
+        """Return the most recent conversation for this thread identifier within one channel."""
+        result = await self.db.execute(
+            select(Conversation)
+            .where(
+                Conversation.thread_id == thread_id,
+                Conversation.channel == channel,
+            )
+            .order_by(Conversation.updated_at.desc())
+        )
+        return result.scalars().first()
+
     async def get_active_by_user_channel(
         self,
         user_id: str,

@@ -8,10 +8,10 @@ Activation
    or request a production WhatsApp Business number.
 3. Set webhook URL to: POST https://your-backend.railway.app/api/v1/channels/whatsapp/inbound
 4. Set in backend/.env:
-       TWILIO_ENABLED=true
        TWILIO_ACCOUNT_SID=ACxxxxxxxx
        TWILIO_AUTH_TOKEN=xxxxxxxx
        TWILIO_WHATSAPP_FROM=whatsapp:+14155238886  (sandbox) or your production number
+       TWILIO_WHATSAPP_STATUS_CALLBACK=https://your-backend/api/v1/channels/whatsapp/status  (optional)
 
 Message window
 --------------
@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import logging
 import re
+from dataclasses import dataclass
 from typing import Any, Optional
 
 from app.channels.base import BaseChannelAdapter, InboundMessage
@@ -76,6 +77,16 @@ def _get_twilio_client():
     from app.core.config import settings
 
     return Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+
+
+@dataclass
+class WhatsAppSendResult:
+    """Outcome of one Twilio outbound send attempt."""
+
+    success: bool
+    sid: Optional[str] = None
+    status: Optional[str] = None
+    error: Optional[str] = None
 
 
 def validate_twilio_signature(
@@ -135,8 +146,11 @@ class WhatsAppChannelAdapter(BaseChannelAdapter):
         """
         from app.core.config import settings
 
-        if not settings.TWILIO_ENABLED:
-            raise RuntimeError("WhatsApp integration is disabled (TWILIO_ENABLED=false)")
+        if not settings.twilio_configured:
+            raise RuntimeError(
+                "WhatsApp integration is not configured. "
+                "Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_WHATSAPP_FROM."
+            )
 
         sender_raw = payload.get("From", "")
         if not sender_raw:
@@ -189,6 +203,16 @@ class WhatsAppChannelAdapter(BaseChannelAdapter):
     # ------------------------------------------------------------------
 
     async def send_response(self, recipient: str, message: str, **kwargs: Any) -> bool:
+        """Compatibility wrapper that returns only success/failure."""
+        result = await self.send_response_with_result(recipient, message, **kwargs)
+        return result.success
+
+    async def send_response_with_result(
+        self,
+        recipient: str,
+        message: str,
+        **kwargs: Any,
+    ) -> WhatsAppSendResult:
         """Send a WhatsApp reply via the Twilio API.
 
         Args:
@@ -198,15 +222,21 @@ class WhatsAppChannelAdapter(BaseChannelAdapter):
             **kwargs  : Optional — media_url (str) for image/document replies.
 
         Returns:
-            True if Twilio accepted the message (HTTP 201), False on error.
+            Structured send result including Twilio SID/status when available.
         """
         from app.core.config import settings
 
-        if not settings.TWILIO_ENABLED:
+        if not settings.twilio_configured:
             logger.info(
                 "Twilio disabled — skipping send_response to %s (message logged only)", recipient
             )
-            return False
+            return WhatsAppSendResult(
+                success=False,
+                error=(
+                    "Twilio WhatsApp credentials are not fully configured. "
+                    "Message was stored in SupportPilot but not sent to WhatsApp."
+                ),
+            )
 
         # Normalise recipient to whatsapp: URI scheme
         if not recipient.startswith("whatsapp:"):
@@ -225,6 +255,8 @@ class WhatsAppChannelAdapter(BaseChannelAdapter):
                 "to": to_whatsapp,
                 "body": message,
             }
+            if settings.TWILIO_WHATSAPP_STATUS_CALLBACK:
+                create_kwargs["status_callback"] = settings.TWILIO_WHATSAPP_STATUS_CALLBACK
 
             media_url: Optional[str] = kwargs.get("media_url")
             if media_url:
@@ -238,7 +270,11 @@ class WhatsAppChannelAdapter(BaseChannelAdapter):
                 msg.sid,
                 msg.status,
             )
-            return True
+            return WhatsAppSendResult(
+                success=True,
+                sid=msg.sid,
+                status=str(msg.status) if msg.status is not None else None,
+            )
 
         except Exception as exc:
             logger.error(
@@ -246,7 +282,7 @@ class WhatsAppChannelAdapter(BaseChannelAdapter):
                 recipient,
                 exc,
             )
-            return False
+            return WhatsAppSendResult(success=False, error=str(exc))
 
 
 # Module-level singleton

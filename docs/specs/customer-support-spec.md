@@ -19,7 +19,7 @@ The AI operates as a "Digital FTE" (Full-Time Employee) — always available, co
 | Web Form | Live | `POST /support/submit` | Public, no auth required |
 | Web Chat | Live | `POST /conversations/{id}/messages` | Requires customer account |
 | Email (Gmail) | Planned | Gmail webhook → ingest endpoint | OAuth2, Phase 2 |
-| WhatsApp | Planned | Twilio webhook → ingest endpoint | Twilio sandbox, Phase 2 |
+| WhatsApp | Live | Twilio webhook → ingest endpoint | Twilio Sandbox or production sender via `/api/v1/channels/whatsapp/inbound` |
 
 All channels funnel into the same data model: `Conversation` → `Message` → `Ticket`.
 
