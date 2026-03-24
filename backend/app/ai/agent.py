@@ -175,6 +175,34 @@ _ACCOUNT_ESCALATION_VARIANTS = [
     ),
 ]
 
+_ACCOUNT_ALT_VARIANTS = [
+    (
+        "Let's try another approach — it's possible your account has been temporarily locked "
+        "after multiple failed attempts.\n\n"
+        "1. Wait 15–30 minutes before trying again (auto-lock resets after a cooldown)\n"
+        "2. Try signing in via a different browser or incognito/private mode\n"
+        "3. Clear your browser's cookies and cached data for this site\n"
+        "4. If you use SSO (Google/Microsoft login), try that option instead\n\n"
+        "Let me know if any of these work — if not, I'll escalate immediately."
+    ),
+    (
+        "Let me suggest a different approach this time.\n\n"
+        "• Your account may be locked due to too many failed attempts — wait 15–30 minutes\n"
+        "• Try a completely different browser or device\n"
+        "• Disable any VPN or proxy you may be using, as these can block authentication\n"
+        "• If you have 2FA enabled, ensure your authenticator app time is in sync\n\n"
+        "Still no luck? Just say so and I'll escalate this to our account team directly."
+    ),
+    (
+        "Here's another angle to try:\n\n"
+        "1. Check whether the account was created under a different email address\n"
+        "2. Try the 'Sign in with Google/Microsoft' option if available\n"
+        "3. A temporary lock lifts automatically after ~30 minutes — try again then\n"
+        "4. If using a work device, your IT policy may be blocking the login domain\n\n"
+        "If none of these apply, reply back and I'll connect you with an account specialist now."
+    ),
+]
+
 _GENERAL_ESCALATION_VARIANTS = [
     (
         "I understand the issue is still not resolved. "
@@ -190,6 +218,11 @@ _GENERAL_ESCALATION_VARIANTS = [
     ),
 ]
 
+_SMART_ESCALATION_MSG = (
+    "I see this issue is persisting. I'm escalating this to a human agent "
+    "for immediate assistance."
+)
+
 
 # --- Helpers ---
 
@@ -199,6 +232,22 @@ def _get_last_ai_response(conversation_history: list[dict]) -> str:
         if m.get("sender_type") in ("ai", "agent") and m.get("content"):
             return m["content"].strip()
     return ""
+
+
+def _count_account_intent_in_history(conversation_history: list[dict]) -> int:
+    """Count prior user messages that contain account/login keywords."""
+    return sum(
+        1
+        for m in conversation_history
+        if m.get("sender_type") == "user"
+        and m.get("content")
+        and any(k in m["content"].lower() for k in _ACCOUNT_KEYWORDS)
+    )
+
+
+def _count_ai_replies_in_history(conversation_history: list[dict]) -> int:
+    """Count how many AI replies exist in the conversation so far."""
+    return sum(1 for m in conversation_history if m.get("sender_type") in ("ai", "agent"))
 
 
 def _pick_variant(variants: list[str], conversation_history: list[dict]) -> str:
@@ -319,20 +368,49 @@ class SupportAgent:
         intent = signals["intent"]
         repeated = signals["repeated_issue"]
 
-        if intent == "account_issue" and repeated:
-            # Account issue + user has already tried → escalate with empathy
-            reason = "Account issue persisting after user's own troubleshooting attempts"
-            logger.info("Pre-flight: account+repeated | conversation=%s", conversation_id)
+        if intent == "account_issue":
+            # 3-stage progression: troubleshoot → alternative approach → escalate
+            prior_count = _count_account_intent_in_history(conversation_history)
+
+            if prior_count >= 2 or repeated:
+                # 3rd+ occurrence or explicit repeated-issue keyword → escalate
+                reason = "Account issue raised multiple times without resolution"
+                logger.info(
+                    "Pre-flight: account stage 3 (escalate) | prior=%d | conversation=%s",
+                    prior_count, conversation_id,
+                )
+                return AIResponse(
+                    response=_pick_variant(_ACCOUNT_ESCALATION_VARIANTS, conversation_history),
+                    intent="account",
+                    confidence=0.9,
+                    should_escalate=True,
+                    escalation_reason=reason,
+                )
+
+            if prior_count == 1:
+                # 2nd occurrence → alternative approach
+                logger.info(
+                    "Pre-flight: account stage 2 (alt approach) | conversation=%s",
+                    conversation_id,
+                )
+                return AIResponse(
+                    response=_pick_variant(_ACCOUNT_ALT_VARIANTS, conversation_history),
+                    intent="account",
+                    confidence=0.85,
+                    should_escalate=False,
+                )
+
+            # First time → standard troubleshooting steps
+            logger.info("Pre-flight: account stage 1 (troubleshoot) | conversation=%s", conversation_id)
             return AIResponse(
-                response=_pick_variant(_ACCOUNT_ESCALATION_VARIANTS, conversation_history),
+                response=_pick_variant(_ACCOUNT_TROUBLESHOOT_VARIANTS, conversation_history),
                 intent="account",
-                confidence=0.9,
-                should_escalate=True,
-                escalation_reason=reason,
+                confidence=0.85,
+                should_escalate=False,
             )
 
         if repeated:
-            # Any other repeated/unresolved issue → general escalation
+            # Any non-account repeated/unresolved issue → general escalation
             reason = "Repeated or unresolved issue detected"
             logger.info("Pre-flight: repeated issue | conversation=%s", conversation_id)
             return AIResponse(
@@ -341,16 +419,6 @@ class SupportAgent:
                 confidence=0.9,
                 should_escalate=True,
                 escalation_reason=reason,
-            )
-
-        if intent == "account_issue":
-            # First-time account/login issue → give troubleshooting steps
-            logger.info("Pre-flight: account first-time | conversation=%s", conversation_id)
-            return AIResponse(
-                response=_pick_variant(_ACCOUNT_TROUBLESHOOT_VARIANTS, conversation_history),
-                intent="account",
-                confidence=0.85,
-                should_escalate=False,
             )
 
         ctx = AgentContext(db=db, user_id=user_id, conversation_id=conversation_id)
@@ -444,6 +512,29 @@ class SupportAgent:
                     self.MAX_ITERATIONS,
                 )
                 return _build_fallback_response(user_message)
+
+            # Smart escalation: low confidence persisting after 2+ prior AI replies
+            ai_reply_count = _count_ai_replies_in_history(conversation_history)
+            if (
+                not ctx.should_escalate
+                and ctx.confidence < 0.5
+                and ai_reply_count >= 2
+            ):
+                logger.info(
+                    "Smart escalation: low confidence (%.2f) after %d AI replies | conversation=%s",
+                    ctx.confidence, ai_reply_count, conversation_id,
+                )
+                return AIResponse(
+                    response=_SMART_ESCALATION_MSG,
+                    intent=ctx.intent,
+                    confidence=ctx.confidence,
+                    should_escalate=True,
+                    escalation_reason=f"Low confidence ({ctx.confidence:.2f}) after {ai_reply_count} replies",
+                    tools_called=ctx.tools_called,
+                    iterations=ctx.iterations,
+                    kb_articles_found=ctx.kb_articles_found,
+                    ticket_created=ctx.ticket_created,
+                )
 
             return AIResponse(
                 response=ctx.final_response,
