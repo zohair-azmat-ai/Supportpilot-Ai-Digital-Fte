@@ -93,6 +93,13 @@ Always be helpful, accurate, and professional. Follow the tool order without dev
 
 # --- Keyword sets ---
 
+_GRATITUDE_KEYWORDS = frozenset({
+    "thank you", "thanks", "appreciate it", "appreciated", "thank u",
+    "many thanks", "cheers", "thx", "ty", "tysm", "grateful",
+    "that helped", "that's helpful", "that was helpful", "problem solved",
+    "issue resolved", "all good", "sorted", "got it", "perfect thanks",
+})
+
 _ACCOUNT_KEYWORDS = frozenset({
     "password", "reset", "login", "log in", "sign in", "signin",
     "credential", "credentials", "locked out", "account", "access denied",
@@ -116,6 +123,12 @@ _STOP_WORDS = frozenset({
 })
 
 # --- Response variant pools (3 variants each, never repeat the last reply) ---
+
+_GRATITUDE_VARIANTS = [
+    "You're welcome! 😊\nIf you need any further help, feel free to reach out anytime.",
+    "Happy to help! 😊\nDon't hesitate to get in touch if anything else comes up.",
+    "Glad I could assist! 😊\nWe're here whenever you need us — take care!",
+]
 
 _ACCOUNT_TROUBLESHOOT_VARIANTS = [
     (
@@ -290,6 +303,18 @@ class SupportAgent:
         # Pre-flight classification — runs before any OpenAI call.
         # Handles clear-cut cases immediately; ambiguous ones go to OpenAI.
         # ------------------------------------------------------------------
+
+        # Gratitude check — evaluated first; overrides all other intents.
+        # A closing message should never trigger issue analysis or escalation.
+        if user_message and any(kw in user_message.lower() for kw in _GRATITUDE_KEYWORDS):
+            logger.info("Pre-flight: gratitude | conversation=%s", conversation_id)
+            return AIResponse(
+                response=_pick_variant(_GRATITUDE_VARIANTS, conversation_history),
+                intent="gratitude",
+                confidence=0.95,
+                should_escalate=False,
+            )
+
         signals = _classify_message_signals(user_message, conversation_history)
         intent = signals["intent"]
         repeated = signals["repeated_issue"]
