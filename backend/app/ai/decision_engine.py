@@ -22,11 +22,14 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any, Optional
 
 from app.ai.client import get_openai_client
 from app.core.config import settings
 from app.schemas.ai_decision import SupportDecision
+
+if TYPE_CHECKING:
+    from app.ai.context_builder import ConversationContext
 
 logger = logging.getLogger(__name__)
 
@@ -89,12 +92,48 @@ User: "Thanks, that worked!"
 → intent: gratitude | category: general | priority: low | sentiment: positive | urgency: low | confidence: 0.98 | escalate: false
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CONTEXT-AWARE BEHAVIOUR
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+A [CONVERSATION CONTEXT] block may appear as a system message just before the
+customer's latest message. Use it to understand the full situation:
+
+• repeated_issue detected → DO NOT repeat the same troubleshooting steps.
+  Acknowledge the persistence, try a different angle, or escalate if justified.
+• user_frustrated → Lead with genuine empathy. Be brief. Skip steps they clearly already tried.
+• previous failed attempts ≥ 2 → Move to a different approach or escalate.
+• related open ticket → Acknowledge the existing issue; tie your reply to resolving it.
+• prior escalation in session → Treat as high priority; escalate unless already resolved.
+• "Do NOT repeat this previous reply" line → Vary your wording meaningfully.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ESCALATION DECISION GUIDE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+NEVER escalate on the first message (turn 1) unless:
+  • Security concern (hacked account, suspicious activity)
+  • Legal / regulatory language ("lawyer", "GDPR", "sue")
+  • Explicit human agent request
+
+Escalate (escalate=true) when ANY of the following are true:
+  • repeated_issue=true AND previous_failed_attempts ≥ 2
+  • user_frustrated=true AND repeated_issue=true
+  • user_frustrated=true AND previous_failed_attempts ≥ 1
+  • related_open_ticket_exists AND same issue is still unresolved
+  • prior_escalation in session AND issue is continuing
+  • confidence < 0.5 after turn 3+
+  • Billing dispute requiring manual review
+  • Clear anger ("this is ridiculous", "useless", repeated profanity)
+
+When escalating, always set a clear, specific escalation_reason.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PRIORITY GUIDE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 low    — general questions, feature requests, informational
 medium — account access issues, minor technical problems
 high   — service disruption, billing issues, repeated failures, data loss
-urgent — security incidents, critical outages, legal threats
+urgent — security incidents, critical outages, legal threats, escalated anger
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 CONFIDENCE GUIDE
@@ -232,17 +271,21 @@ class SupportDecisionEngine:
         self,
         user_message: str,
         conversation_history: list[dict[str, Any]],
+        context: Optional["ConversationContext"] = None,
     ) -> SupportDecision:
         """Generate a structured support decision.
 
         Args:
             user_message: Latest message from the customer.
             conversation_history: Prior messages with ``sender_type`` and ``content``.
+            context: Optional ConversationContext built by ConversationContextBuilder.
+                     When provided, repeat/frustration signals and user history are
+                     injected into the LLM prompt for context-aware decisions.
 
         Returns:
             Validated SupportDecision — always valid, never raises.
         """
-        messages = self._build_messages(conversation_history, user_message)
+        messages = self._build_messages(conversation_history, user_message, context)
 
         try:
             client = get_openai_client()
@@ -268,12 +311,20 @@ class SupportDecisionEngine:
         self,
         conversation_history: list[dict[str, Any]],
         user_message: str,
+        context: Optional["ConversationContext"] = None,
     ) -> list[dict]:
-        """Build the messages array for the chat completions API."""
+        """Build the messages array for the chat completions API.
+
+        Includes:
+          1. DECISION_SYSTEM_PROMPT (always)
+          2. Last 10 conversation turns (history)
+          3. [CONVERSATION CONTEXT] system message (when context is provided)
+          4. Current user message
+        """
         messages: list[dict] = [{"role": "system", "content": DECISION_SYSTEM_PROMPT}]
 
-        # Last 6 turns for context window efficiency
-        for entry in conversation_history[-6:]:
+        # Last 10 turns (increased from 6 for Step 2 memory)
+        for entry in conversation_history[-10:]:
             sender = entry.get("sender_type", "user")
             content = entry.get("content", "")
             if not content:
@@ -292,6 +343,12 @@ class SupportDecisionEngine:
                 except Exception:  # noqa: BLE001
                     pass
                 messages.append({"role": "assistant", "content": content})
+
+        # Inject structured context block just before the current user message
+        if context is not None:
+            block = context.to_prompt_block()
+            if block:
+                messages.append({"role": "system", "content": block})
 
         messages.append({"role": "user", "content": user_message})
         return messages

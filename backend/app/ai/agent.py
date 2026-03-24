@@ -9,7 +9,12 @@ Architecture (Level 4):
     │   priority, sentiment, urgency, confidence, escalate)
     └── This is the sole source of truth for the customer-facing reply.
 
-  Step 2 — Tool loop (side effects only)
+  Step 2 (this upgrade) — ConversationContextBuilder
+    ├── Derives repeat/frustration signals from conversation history
+    ├── Fetches cross-session user tickets/conversations from DB
+    └── Injects a [CONVERSATION CONTEXT] block into the LLM prompt
+
+  Step 3 — Tool loop (side effects only)
     ├── get_customer_history  — loads prior tickets/conversations for context
     ├── search_knowledge_base — retrieves relevant help articles
     ├── create_ticket         — logs the interaction with correct category/priority
@@ -27,6 +32,7 @@ import logging
 from typing import Any
 
 from app.ai.client import get_openai_client
+from app.ai.context_builder import context_builder
 from app.ai.decision_engine import decision_engine
 from app.ai.service import AIResponse, _build_fallback_response
 from app.ai.tools import TOOL_DEFINITIONS, AgentContext, ToolExecutor
@@ -110,10 +116,38 @@ class SupportAgent:
             AIResponse — always valid, never raises.
         """
         # ------------------------------------------------------------------
-        # Phase 1 — Decision engine: generates structured reply + metadata
+        # Phase 1a — Build conversation context (memory + repeat signals)
+        # Safe fallback: if context build fails, ctx=None and the decision
+        # engine runs without context (Step 1 behaviour as fallback).
+        # ------------------------------------------------------------------
+        conv_context = None
+        try:
+            conv_context = await context_builder.build(
+                db=db,
+                user_id=user_id,
+                user_message=user_message,
+                conversation_history=conversation_history,
+            )
+            logger.info(
+                "Context: turn=%d repeated=%s frustrated=%s "
+                "failed_attempts=%d open_ticket=%s | conversation=%s",
+                conv_context.message_count_in_session + 1,
+                conv_context.repeated_issue,
+                conv_context.user_frustrated,
+                conv_context.previous_failed_attempts,
+                conv_context.related_open_ticket_exists,
+                conversation_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Context build failed (non-fatal): %s", exc)
+
+        # ------------------------------------------------------------------
+        # Phase 1b — Decision engine: generates structured reply + metadata
         # ------------------------------------------------------------------
         try:
-            decision = await decision_engine.run(user_message, conversation_history)
+            decision = await decision_engine.run(
+                user_message, conversation_history, context=conv_context
+            )
         except Exception as exc:  # noqa: BLE001 — absolute safety net
             logger.error("Decision engine failed: %s", exc, exc_info=True)
             fallback = _build_fallback_response(user_message)
