@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { AlertTriangle, ArrowLeft, Bot, Brain, Layers3, Tag } from 'lucide-react'
@@ -16,24 +16,57 @@ import { cn, formatPercent } from '../../../../lib/utils'
 export default function ChatDetailPage() {
   const params = useParams()
   const id = params.id as string
-  const { conversation, loading, error, addMessages } = useConversationDetail(id)
+  const { conversation, loading, error, addMessages, addUserMessage, addAiMessage } = useConversationDetail(id)
   const [aiLoading, setAiLoading] = useState(false)
+  const [streamingContent, setStreamingContent] = useState<string | null>(null)
+  const pendingUserMsg = useRef<import('../../../../types').Message | null>(null)
   const toast = useToast()
 
   const handleSend = async (content: string) => {
     if (!conversation) return
     setAiLoading(true)
+    setStreamingContent(null)
+    pendingUserMsg.current = null
+
     try {
-      const { user_message, ai_message } = await messagesApi.send(id, content)
-      addMessages(user_message, ai_message)
-    } catch (err: unknown) {
-      const msg =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Failed to send message'
-          : 'Failed to send message. Please try again.'
-      toast.error(msg)
-    } finally {
-      setAiLoading(false)
+      await messagesApi.stream(id, content, {
+        onUserMessage: (userMsg) => {
+          pendingUserMsg.current = userMsg
+          addUserMessage(userMsg)
+        },
+        onToken: (token) => {
+          // First token: switch from typing dots to live streaming text
+          setAiLoading(false)
+          setStreamingContent((prev) => (prev ?? '') + token)
+        },
+        onDone: (aiMsg) => {
+          setStreamingContent(null)
+          setAiLoading(false)
+          addAiMessage(aiMsg)
+        },
+        onError: (errMsg) => {
+          setStreamingContent(null)
+          setAiLoading(false)
+          toast.error(errMsg)
+        },
+      })
+    } catch {
+      // Streaming failed — fall back to standard request
+      setStreamingContent(null)
+      setAiLoading(true)
+      try {
+        const { user_message, ai_message } = await messagesApi.send(id, content)
+        addMessages(user_message, ai_message)
+      } catch (fallbackErr: unknown) {
+        const msg =
+          fallbackErr && typeof fallbackErr === 'object' && 'response' in fallbackErr
+            ? (fallbackErr as { response?: { data?: { detail?: string } } }).response?.data?.detail ||
+              'Failed to send message'
+            : 'Failed to send message. Please try again.'
+        toast.error(msg)
+      } finally {
+        setAiLoading(false)
+      }
     }
   }
 
@@ -151,6 +184,7 @@ export default function ChatDetailPage() {
           channel={conversation.channel}
           escalated={isEscalated}
           isLoading={aiLoading}
+          streamingContent={streamingContent}
         />
       </div>
 

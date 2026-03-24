@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { getToken, clearAuth } from './auth'
+import { getToken, clearAuth, TOKEN_KEY } from './auth'
 import {
   User,
   Conversation,
@@ -100,6 +100,72 @@ export const messagesApi = {
   ): Promise<{ user_message: Message; ai_message: Message }> => {
     const res = await api.post(`/conversations/${conversationId}/messages`, { content })
     return res.data
+  },
+
+  stream: async (
+    conversationId: string,
+    content: string,
+    callbacks: {
+      onUserMessage: (msg: Message) => void
+      onToken: (token: string) => void
+      onDone: (msg: Message) => void
+      onError: (error: string) => void
+    }
+  ): Promise<void> => {
+    const { onUserMessage, onToken, onDone, onError } = callbacks
+    const token = typeof window !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'
+
+    const response = await fetch(
+      `${baseUrl}/conversations/${conversationId}/messages/stream`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ content }),
+      }
+    )
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`)
+    }
+
+    const reader = response.body?.getReader()
+    if (!reader) throw new Error('No response body')
+
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          const raw = line.slice(6).trim()
+          if (!raw) continue
+
+          try {
+            const event = JSON.parse(raw)
+            if (event.type === 'user_message') onUserMessage(event.message as Message)
+            else if (event.type === 'token') onToken(event.content as string)
+            else if (event.type === 'done') onDone(event.message as Message)
+            else if (event.type === 'error') onError(event.message as string)
+          } catch {
+            // Skip malformed SSE events
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock()
+    }
   },
 }
 

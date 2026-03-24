@@ -10,6 +10,7 @@ interface ChatWindowProps {
   channel: Channel
   escalated?: boolean
   isLoading?: boolean
+  streamingContent?: string | null
 }
 
 function TypingIndicator() {
@@ -38,14 +39,30 @@ export function ChatWindow({
   channel,
   escalated = false,
   isLoading = false,
+  streamingContent = null,
 }: ChatWindowProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, isLoading])
+  }, [messages, isLoading, streamingContent])
 
-  if (messages.length === 0 && !isLoading) {
+  const streamingMessage: Message | null = streamingContent != null
+    ? {
+        id: '__streaming__',
+        conversation_id: '',
+        sender_type: 'ai',
+        content: streamingContent,
+        intent: null,
+        ai_confidence: null,
+        sentiment: null,
+        urgency: null,
+        escalate: null,
+        created_at: new Date().toISOString(),
+      }
+    : null
+
+  if (messages.length === 0 && !isLoading && streamingContent == null) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4 text-center px-4">
         <div className="rounded-2xl bg-background-surface border border-border p-5">
@@ -66,7 +83,15 @@ export function ChatWindow({
       {messages.map((msg) => (
         <MessageBubble key={msg.id} message={msg} channel={channel} escalated={escalated} />
       ))}
-      {isLoading && <TypingIndicator />}
+      {streamingMessage && (
+        <MessageBubble
+          message={streamingMessage}
+          channel={channel}
+          escalated={escalated}
+          isStreaming
+        />
+      )}
+      {isLoading && streamingContent == null && <TypingIndicator />}
       <div ref={bottomRef} />
     </div>
   )

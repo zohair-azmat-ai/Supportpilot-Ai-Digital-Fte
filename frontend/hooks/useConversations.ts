@@ -96,5 +96,19 @@ export function useConversationDetail(id: string) {
     })
   }, [])
 
-  return { conversation, loading, error, fetchConversation, addMessages }
+  const addUserMessage = useCallback((userMsg: Message) => {
+    setConversation((prev) => {
+      if (!prev) return prev
+      return { ...prev, messages: [...prev.messages, userMsg] }
+    })
+  }, [])
+
+  const addAiMessage = useCallback((aiMsg: Message) => {
+    setConversation((prev) => {
+      if (!prev) return prev
+      return { ...prev, messages: [...prev.messages, aiMsg] }
+    })
+  }, [])
+
+  return { conversation, loading, error, fetchConversation, addMessages, addUserMessage, addAiMessage }
 }

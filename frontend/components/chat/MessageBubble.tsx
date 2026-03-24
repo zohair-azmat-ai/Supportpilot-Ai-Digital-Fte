@@ -8,6 +8,7 @@ interface MessageBubbleProps {
   message: Message
   channel: Channel
   escalated?: boolean
+  isStreaming?: boolean
 }
 
 function ConfidenceBar({ value }: { value: number }) {
@@ -32,7 +33,7 @@ function ConfidenceBar({ value }: { value: number }) {
   )
 }
 
-export function MessageBubble({ message, channel, escalated = false }: MessageBubbleProps) {
+export function MessageBubble({ message, channel, escalated = false, isStreaming = false }: MessageBubbleProps) {
   const isUser = message.sender_type === 'user'
   const isAI = message.sender_type === 'ai'
 
@@ -69,6 +70,9 @@ export function MessageBubble({ message, channel, escalated = false }: MessageBu
               {line}
             </React.Fragment>
           ))}
+          {isStreaming && (
+            <span className="ml-0.5 inline-block h-[1em] w-0.5 translate-y-[1px] animate-pulse rounded-sm bg-current opacity-70" />
+          )}
         </div>
 
         {/* AI signal row */}
