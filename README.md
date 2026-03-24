@@ -1,22 +1,20 @@
 <div align="center">
 
-# SupportPilot AI
+# 🚀 SupportPilot AI — Digital Customer Support FTE
 
-### A production-grade AI customer support platform — built as a Digital FTE that handles tickets, chat, escalation, and analytics 24/7
+**Production-grade AI support platform with chat, tickets, escalation, and analytics.**
+
+> ⚡ Live on Vercel &nbsp;·&nbsp; 📊 Full REST API &nbsp;·&nbsp; 🧠 AI-Powered Responses &nbsp;·&nbsp; 🔁 Real-time Processing
 
 <br/>
 
 [![Next.js](https://img.shields.io/badge/Next.js_14-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)](https://nextjs.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://typescriptlang.org)
-[![Python](https://img.shields.io/badge/Python_3.11-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
-[![OpenAI](https://img.shields.io/badge/GPT--4o--mini-412991?style=for-the-badge&logo=openai&logoColor=white)](https://platform.openai.com)
-
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://postgresql.org)
-[![Vercel](https://img.shields.io/badge/Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://vercel.com)
-[![Hugging Face](https://img.shields.io/badge/Hugging_Face-FFD21E?style=for-the-badge&logo=huggingface&logoColor=black)](https://huggingface.co/spaces/ZohairAzmat/supportpilot-ai-fte)
-[![Neon](https://img.shields.io/badge/Neon_DB-00E5B0?style=for-the-badge&logoColor=black)](https://neon.tech)
-[![License: MIT](https://img.shields.io/badge/License-MIT-22c55e?style=for-the-badge)](LICENSE)
+[![OpenAI](https://img.shields.io/badge/OpenAI_GPT--4o-412991?style=for-the-badge&logo=openai&logoColor=white)](https://platform.openai.com)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://typescriptlang.org)
+[![Status: Live](https://img.shields.io/badge/Status-Live-22c55e?style=for-the-badge&logo=vercel&logoColor=white)](https://supportpilot-ai-digital-fte.vercel.app)
+[![License: MIT](https://img.shields.io/badge/License-MIT-f59e0b?style=for-the-badge)](LICENSE)
 
 <br/>
 
@@ -30,38 +28,41 @@
 
 <div align="center">
 
-| | Link | Status |
-|:---|:---|:---:|
-| **🌐 Frontend** | [supportpilot-ai-digital-fte.vercel.app](https://supportpilot-ai-digital-fte.vercel.app) | ✅ Live |
-| **⚡ Backend API** | [zohairazmat-supportpilot-ai-fte.hf.space](https://zohairazmat-supportpilot-ai-fte.hf.space) | ✅ Live |
-| **📖 Interactive API Docs** | [.../docs](https://zohairazmat-supportpilot-ai-fte.hf.space/docs) | ✅ Live |
+| Service | Link | Status |
+|:-------:|:-----|:------:|
+| 🌐 **Frontend** | [supportpilot-ai-digital-fte.vercel.app](https://supportpilot-ai-digital-fte.vercel.app) | ✅ Live |
+| ⚡ **Backend API** | [zohairazmat-supportpilot-ai-fte.hf.space](https://zohairazmat-supportpilot-ai-fte.hf.space) | ✅ Live |
+| 📖 **API Docs** | [.../docs](https://zohairazmat-supportpilot-ai-fte.hf.space/docs) | ✅ Live |
 
 </div>
 
-**Deployed on:** Vercel (Next.js) · Hugging Face Spaces (FastAPI · Docker) · Neon (PostgreSQL)
+<br/>
+
+**Deployed on:** &nbsp; Vercel (Next.js) &nbsp;·&nbsp; Hugging Face Spaces (FastAPI · Docker) &nbsp;·&nbsp; Neon (PostgreSQL)
 
 **Demo credentials:**
+
 ```
 Admin portal  →  admin@supportpilot.ai  /  Admin123!
 ```
 
-> **Note:** The backend runs on Hugging Face Spaces free tier — first request may take 30–60 s to wake the container.
+> **Note:** Backend runs on Hugging Face Spaces free tier — first request may take 30–60 s to cold-start.
 
 ---
 
 ## ✨ Why This Project Stands Out
 
-This is not a tutorial project or a hackathon demo. It is a **production-style monorepo** built to the standard you would expect at a well-engineered SaaS company.
+This is not a tutorial project or a hackathon demo. It is a **production-style monorepo** built to the standard of a well-engineered SaaS company.
 
-| What | Why it matters |
-|:---|:---|
-| 🏗️ **Full-stack, live deployment** | Frontend on Vercel, backend on HF Spaces, DB on Neon — all wired together and publicly accessible |
-| 🤖 **Tool-based AI agent** | The AI runs a strict 5-tool reasoning loop (not a single prompt call) — every decision is logged, auditable, and explainable |
-| 📊 **Dual portal system** | Separate customer and admin experiences with role-based auth, not just a single page |
-| 🔌 **Event-driven architecture** | Dual-mode event bus — InMemoryBus for dev, KafkaEventBus for prod — switchable with one env var |
-| 📡 **Multi-channel design** | Channel adapter pattern normalises Web, Gmail, and WhatsApp into the same pipeline — add a channel without touching business logic |
-| 📈 **CRM-grade schema** | Full relational schema: users, customers, customer_identifiers, conversations, messages, tickets, knowledge_base, agent_metrics |
-| ☸️ **Scale-ready from day one** | Kafka consumer workers and Kubernetes manifests are already in the repo for the next phase |
+| | What | Why it matters |
+|:---:|:---|:---|
+| 🏗️ | **Full-stack, live deployment** | Frontend on Vercel, backend on HF Spaces, DB on Neon — all wired together and publicly accessible |
+| 🤖 | **Tool-based AI agent** | Runs a strict 5-tool reasoning loop — every decision is logged, auditable, and explainable |
+| 📊 | **Dual portal system** | Separate customer and admin dashboards with JWT role-based access control |
+| 🔌 | **Event-driven architecture** | Dual-mode event bus — InMemoryBus for dev, KafkaEventBus for prod — one env var to switch |
+| 📡 | **Multi-channel design** | Channel adapter pattern normalises Web, Gmail, and WhatsApp into one pipeline |
+| 📈 | **CRM-grade schema** | 8 relational tables: users, customers, conversations, messages, tickets, KB, agent_metrics |
+| ☸️ | **Scale-ready from day one** | Kafka workers and Kubernetes manifests already committed for the next phase |
 
 ---
 
@@ -81,6 +82,7 @@ This is not a tutorial project or a hackathon demo. It is a **production-style m
 - [📖 Documentation](#-documentation)
 - [📈 Scaling Roadmap](#-scaling-roadmap)
 - [🔮 Future Features](#-future-features)
+- [⭐ Support the Project](#-support-the-project)
 - [🤝 Contributing](#-contributing)
 - [📄 License](#-license)
 
@@ -89,42 +91,46 @@ This is not a tutorial project or a hackathon demo. It is a **production-style m
 ## 🎯 Features
 
 ### Customer Portal
+
 | Feature | Description |
-|:---|:---|
-| **AI-Powered Chat** | Real-time conversations powered by GPT-4o-mini with intent detection, context-awareness, and smart escalation |
-| **Web Support Form** | No account required — submit a request and receive an AI response with a tracked ticket in one shot |
-| **Ticket Dashboard** | Track every support request with status filters (open → in-progress → resolved), priority levels, and categories |
-| **Conversation History** | Full threaded message history with per-message AI confidence scores and intent labels |
-| **Secure Auth** | JWT-based signup and login with role-based access control (customer / admin) |
+|:--------|:------------|
+| **🤖 AI-Powered Chat** | Real-time GPT-4o-mini conversations with intent detection, context memory, and smart escalation |
+| **📝 Web Support Form** | No account required — submit a request and receive an AI response with a tracked ticket instantly |
+| **🎫 Ticket Dashboard** | Track every request with status filters (open → in-progress → resolved), priority, and categories |
+| **💬 Conversation History** | Threaded message history with per-message AI confidence scores and intent labels |
+| **🔒 Secure Auth** | JWT-based signup and login with role-based access control (customer / admin) |
 
 ### Admin Portal
+
 | Feature | Description |
-|:---|:---|
-| **Analytics Dashboard** | Live stats — total users, open tickets, active conversations, resolution rate, escalation counts |
-| **Ticket Management** | Full CRUD with inline status updates, priority management, and category routing |
-| **Conversation Explorer** | Browse all conversations across channels, inspect message threads, view AI confidence and escalation flags |
-| **User Management** | View all registered users, roles, account status, and activity |
+|:--------|:------------|
+| **📊 Analytics Dashboard** | Live stats — users, open tickets, active conversations, resolution rate, escalation counts |
+| **🎫 Ticket Management** | Full CRUD with inline status updates, priority management, and category routing |
+| **💬 Conversation Explorer** | Browse all conversations, inspect threads, view AI confidence and escalation flags |
+| **👥 User Management** | View all registered users, roles, account status, and activity |
 
 ### Platform & AI
+
 | Feature | Description |
-|:---|:---|
-| **5-Tool AI Agent** | Strict tool execution order: `get_customer_history` → `search_knowledge_base` → `create_ticket` → `[escalate_to_human]` → `send_response` |
-| **Smart Escalation** | Detects billing disputes, legal language, repeated issues, and frustration signals — escalates automatically |
-| **Intent Classification** | 7 intent categories (technical, billing, account, complaint, feature_request, general, urgent) with confidence scoring |
-| **Conversation Memory** | Pre-flight check detects repeated topics across message history before calling OpenAI |
-| **Event-Driven Bus** | Dual-mode: InMemoryEventBus for local dev, KafkaEventBus for production (zero code change) |
-| **Knowledge Base** | Keyword-searchable articles with pgvector-ready `embedding` field for Phase 2 RAG |
-| **Agent Metrics** | Every AI interaction logged: intent, confidence, tools called, response time, escalation status |
-| **Multi-Channel** | Web live · Gmail scaffolded · WhatsApp scaffolded — activate with credentials only |
+|:--------|:------------|
+| **🧠 5-Tool AI Agent** | Strict tool order: `get_history` → `search_KB` → `create_ticket` → `[escalate]` → `send_response` |
+| **🚨 Smart Escalation** | Detects billing disputes, legal language, repeated issues, and frustration signals automatically |
+| **🏷️ Intent Classification** | 7 categories (technical, billing, account, complaint, feature_request, general, urgent) + confidence |
+| **🧠 Conversation Memory** | Pre-flight check detects repeated topics across history before calling OpenAI |
+| **⚡ Event-Driven Bus** | InMemoryEventBus for dev · KafkaEventBus for prod — zero code change to switch |
+| **📚 Knowledge Base** | Keyword-searchable articles with pgvector-ready `embedding` field for Phase 2 RAG |
+| **📈 Agent Metrics** | Every AI call logged: intent, confidence, tools, response time, escalation status |
+| **📡 Multi-Channel** | Web live · Gmail scaffolded · WhatsApp scaffolded — activate with credentials only |
 
 ---
 
 ## 🛠 Tech Stack
 
 ### Frontend
+
 | Technology | Version | Purpose |
-|:---|:---|:---|
-| Next.js | 14 (App Router) | SSR, routing, React Server Components |
+|:-----------|:-------:|:--------|
+| Next.js | 14 | SSR, App Router, React Server Components |
 | TypeScript | 5 | End-to-end type safety |
 | Tailwind CSS | 3 | Utility-first dark premium UI |
 | React Hook Form + Zod | — | Type-safe form validation |
@@ -132,54 +138,56 @@ This is not a tutorial project or a hackathon demo. It is a **production-style m
 | Lucide React | — | Consistent icon system |
 
 ### Backend
+
 | Technology | Version | Purpose |
-|:---|:---|:---|
+|:-----------|:-------:|:--------|
 | FastAPI | Latest | Async Python REST API |
-| SQLAlchemy | 2.0 (async) | Type-safe async ORM |
+| SQLAlchemy | 2.0 | Type-safe async ORM |
 | Alembic | — | Schema migrations |
 | asyncpg | — | Async PostgreSQL driver |
 | Pydantic | v2 | Request/response schemas and settings |
 | python-jose + bcrypt | — | JWT signing + password hashing |
 
-### AI & Data
-| Technology | Purpose |
-|:---|:---|
-| OpenAI GPT-4o-mini | Intent detection, response generation, tool-calling agent |
-| PostgreSQL (Neon) | Serverless managed Postgres with pgvector support |
-| Apache Kafka | Async event processing in production (USE_KAFKA=true) |
+### AI, Data & Deployment
 
-### Deployment
-| Service | What runs there |
-|:---|:---|
-| **Vercel** | Next.js 14 frontend (edge-optimised) |
-| **Hugging Face Spaces** | FastAPI backend (Docker container) |
-| **Neon** | Serverless PostgreSQL database |
+| Technology | Purpose |
+|:-----------|:--------|
+| OpenAI GPT-4o-mini | Intent detection, response generation, tool-calling agent loop |
+| PostgreSQL — Neon | Serverless managed Postgres with pgvector support |
+| Apache Kafka | Async event processing in production (`USE_KAFKA=true`) |
+| Vercel | Next.js 14 frontend — edge-optimised global deployment |
+| Hugging Face Spaces | FastAPI backend — Docker container deployment |
 
 ---
 
 ## 📐 Architecture
 
+<br/>
+
 ```mermaid
 flowchart TD
     Browser(["🌐 Browser\nNext.js 14 · Vercel"])
 
-    subgraph BackendLayer["⚡ FastAPI Backend — Hugging Face Spaces"]
-        Routes["Route Handlers\n/auth · /chat · /tickets · /admin · /support"]
-        Adapters["Channel Adapters\nWeb ✅  Email 🔧  WhatsApp 🔧"]
-        EventBus["Event Bus\nInMemoryBus dev  ·  KafkaBus prod"]
-        Services["Services\nAuth · Chat · Tickets · Support · AI"]
+    subgraph BackendLayer["  ⚡ FastAPI Backend — Hugging Face Spaces  "]
+        direction TB
+        Routes["🔀 Route Handlers\n/auth · /chat · /tickets · /admin · /support"]
+        Adapters["📡 Channel Adapters\nWeb ✅   Email 🔧   WhatsApp 🔧"]
+        EventBus["🔄 Event Bus\nInMemoryBus dev  ·  KafkaBus prod"]
+        Services["⚙️ Services\nAuth · Chat · Tickets · Support · AI"]
     end
 
-    subgraph AgentLayer["🤖 AI Agent — GPT-4o-mini"]
-        Agent["SupportAgent\nTool-calling loop · max 8 iterations"]
-        Tools["5-Tool Workflow\nhistory → KB → ticket → escalate → respond"]
-        GPT["OpenAI API\nGPT-4o-mini · JSON mode · temp 0.3"]
+    subgraph AgentLayer["  🤖 AI Agent — GPT-4o-mini  "]
+        direction TB
+        Agent["🧠 SupportAgent\nTool-calling loop · max 8 iterations"]
+        Tools["🛠️ 5-Tool Workflow\nhistory → KB → ticket → escalate → respond"]
+        GPT["✨ OpenAI API\nGPT-4o-mini · JSON mode · temp 0.3"]
     end
 
-    subgraph DataLayer["🗄️ Data Layer — Neon PostgreSQL"]
-        Repos["Repositories\nUser · Conv · Message · Ticket · Metrics · KB"]
-        PG[("PostgreSQL\nNeon Serverless")]
-        KnowledgeBase[("Knowledge Base\npgvector-ready")]
+    subgraph DataLayer["  🗄️ Data Layer — Neon PostgreSQL  "]
+        direction TB
+        Repos["📦 Repositories\nUser · Conv · Message · Ticket · Metrics · KB"]
+        PG[("🐘 PostgreSQL\nNeon Serverless")]
+        KBase[("📚 Knowledge Base\npgvector-ready")]
     end
 
     Browser -->|"HTTPS REST"| Routes
@@ -192,30 +200,32 @@ flowchart TD
     Tools --> Repos
     Services --> Repos
     Repos --> PG
-    Repos --> KnowledgeBase
+    Repos --> KBase
 
-    classDef frontendStyle fill:#6366f1,stroke:#4338ca,color:#fff
-    classDef backendStyle fill:#0369a1,stroke:#075985,color:#fff
-    classDef aiStyle fill:#7c3aed,stroke:#6d28d9,color:#fff
-    classDef gptStyle fill:#412991,stroke:#2d1b69,color:#fff
-    classDef dbStyle fill:#065f46,stroke:#047857,color:#fff
+    classDef frontendStyle fill:#4f46e5,stroke:#3730a3,stroke-width:2px,color:#fff
+    classDef backendStyle fill:#0369a1,stroke:#075985,stroke-width:2px,color:#fff
+    classDef aiStyle fill:#6d28d9,stroke:#5b21b6,stroke-width:2px,color:#fff
+    classDef gptStyle fill:#312e81,stroke:#1e1b4b,stroke-width:2px,color:#fff
+    classDef dbStyle fill:#065f46,stroke:#064e3b,stroke-width:2px,color:#fff
 
     class Browser frontendStyle
     class Routes,Adapters,EventBus,Services backendStyle
     class Agent,Tools aiStyle
     class GPT gptStyle
-    class Repos,PG,KnowledgeBase dbStyle
+    class Repos,PG,KBase dbStyle
 ```
+
+<br/>
 
 **Layer responsibilities:**
 
 | Layer | Responsibility |
-|:---|:---|
+|:------|:---------------|
 | **Routes** | HTTP handling — auth, validation, response serialisation |
 | **Channel Adapters** | Normalise channel-specific payloads into a shared `InboundMessage` schema |
-| **Event Bus** | Decouple ingest from processing — swap InMemory→Kafka with one env var |
+| **Event Bus** | Decouple ingest from processing — swap InMemory → Kafka with one env var |
 | **Services** | Orchestrate the pipeline — auth, ticket creation, message flow |
-| **AI Agent** | Run structured tool calls, classify intent, generate responses, decide on escalation |
+| **AI Agent** | Run structured tool calls, classify intent, generate responses, decide escalation |
 | **Repositories** | Abstract all database queries — one class per entity |
 
 ---
@@ -225,13 +235,13 @@ flowchart TD
 Every inbound message — regardless of origin — is normalised into a shared `InboundMessage` schema before reaching the support pipeline. The service layer never sees raw channel payloads.
 
 | Channel | Status | Entry Point |
-|:---|:---:|:---|
+|:--------|:------:|:------------|
 | **Web Chat** | ✅ Live | `POST /api/v1/conversations/{id}/messages` |
 | **Web Support Form** | ✅ Live | `POST /api/v1/support/submit` |
-| **Gmail / Email** | 🔧 Scaffolded | `backend/app/channels/email.py` — add credentials |
-| **WhatsApp** | 🔧 Scaffolded | `backend/app/channels/whatsapp.py` — add Twilio credentials |
+| **Gmail / Email** | 🔧 Scaffolded | `backend/app/channels/email.py` — add credentials to activate |
+| **WhatsApp** | 🔧 Scaffolded | `backend/app/channels/whatsapp.py` — add Twilio credentials to activate |
 
-**Adapter interface — adding a new channel requires only one file:**
+**Adding a new channel requires only one file:**
 
 ```python
 class BaseChannelAdapter(ABC):
@@ -253,7 +263,7 @@ supportpilot-ai/                        ← Single production monorepo
 ├── .gitignore
 │
 ├── frontend/                           # Next.js 14 application
-│   ├── app/                            # App Router pages
+│   ├── app/
 │   │   ├── (auth)/                     # Login · Signup
 │   │   ├── (customer)/                 # Dashboard · Chat · Tickets · Support · Settings
 │   │   └── (admin)/admin/              # Overview · Tickets · Conversations · Users · Analytics
@@ -262,7 +272,6 @@ supportpilot-ai/                        ← Single production monorepo
 │   │   ├── layout/                     # Sidebar, Header, DashboardLayout
 │   │   ├── chat/                       # ChatWindow, MessageBubble, ChatInput
 │   │   ├── tickets/                    # TicketCard, TicketTable
-│   │   ├── dashboard/                  # StatsCard, RecentTickets
 │   │   └── forms/                      # SupportForm
 │   ├── context/                        # AuthContext, ToastContext
 │   ├── hooks/                          # useAuth, useConversations, useTickets
@@ -271,32 +280,26 @@ supportpilot-ai/                        ← Single production monorepo
 │
 ├── backend/                            # FastAPI application
 │   ├── main.py                         # App entry point + lifespan
-│   ├── requirements.txt
 │   ├── Dockerfile                      # HF Spaces / Railway container
-│   │
 │   └── app/
 │       ├── core/                       # config · database · security · deps
 │       ├── models/                     # SQLAlchemy ORM models (8 tables)
-│       ├── schemas/                    # Pydantic v2 request/response schemas
-│       ├── repositories/               # Data access layer — one class per entity
-│       ├── services/                   # Business logic — auth · chat · tickets · support
-│       ├── channels/                   # Adapter layer — base · web · email · whatsapp
-│       ├── events/                     # Event bus — topics · schemas · InMemory · Kafka
+│       ├── schemas/                    # Pydantic v2 schemas
+│       ├── repositories/               # Data access — one class per entity
+│       ├── services/                   # Business logic — auth · chat · tickets
+│       ├── channels/                   # Adapters — base · web · email · whatsapp
+│       ├── events/                     # Event bus — InMemory · Kafka · topics
 │       ├── ai/
-│       │   ├── agent.py                # SupportAgent — tool-calling loop
-│       │   ├── tools.py                # 5 tool definitions + ToolExecutor
-│       │   ├── service.py              # AIResponse dataclass + context-aware fallback
-│       │   ├── prompts.py              # System prompts
-│       │   └── client.py              # AsyncOpenAI singleton
+│       │   ├── agent.py                # SupportAgent — 5-tool loop
+│       │   ├── tools.py                # Tool definitions + ToolExecutor
+│       │   ├── service.py              # AIResponse dataclass + fallback logic
+│       │   └── client.py               # AsyncOpenAI singleton
 │       └── api/v1/routes/              # HTTP route handlers
 │
 ├── workers/                            # Kafka consumer workers
-│   ├── message_processor.py            # Full support pipeline worker
-│   └── main.py                         # python -m workers.main
-│
 ├── docs/                               # Architecture, API spec, DB schema, AI flow
 ├── scripts/                            # seed.py, init_db.sh
-└── k8s/                                # Kubernetes manifests (API + worker deployments)
+└── k8s/                                # Kubernetes manifests
 ```
 
 ---
@@ -332,7 +335,7 @@ pip install -r requirements.txt
 
 # Configure environment
 cp .env.example .env
-# Set DATABASE_URL, SECRET_KEY, OPENAI_API_KEY (see Environment Variables below)
+# Edit .env — set DATABASE_URL, SECRET_KEY, OPENAI_API_KEY
 
 # Run migrations
 alembic upgrade head
@@ -344,7 +347,7 @@ python ../scripts/seed.py
 uvicorn main:app --reload --port 8000
 ```
 
-> API available at `http://localhost:8000` · Swagger UI at `http://localhost:8000/docs`
+> API: `http://localhost:8000` &nbsp;·&nbsp; Swagger UI: `http://localhost:8000/docs`
 
 ### 3. Frontend
 
@@ -352,36 +355,36 @@ uvicorn main:app --reload --port 8000
 cd frontend
 
 npm install
-
-# NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1  (already in .env.local.example)
-cp .env.local.example .env.local
+cp .env.local.example .env.local   # pre-configured for localhost
 
 npm run dev
 ```
 
-> App available at `http://localhost:3000`
+> App: `http://localhost:3000`
 
-### 4. Database Options
+### 4. Database
 
 **Option A — Neon (recommended, free tier):**
-1. Sign up at [neon.tech](https://neon.tech)
-2. Create a project and copy the connection string
+
+1. Sign up at [neon.tech](https://neon.tech) and create a project
+2. Copy the connection string
 3. Set `DATABASE_URL=postgresql+asyncpg://...?sslmode=require` in `backend/.env`
 
 **Option B — Local PostgreSQL:**
+
 ```bash
 psql -U postgres -c "CREATE DATABASE supportpilot;"
 # DATABASE_URL=postgresql+asyncpg://postgres:password@localhost:5432/supportpilot
 ```
 
-### 5. One-command setup
+### 5. One-Command Setup
 
 ```bash
 chmod +x scripts/init_db.sh
 ./scripts/init_db.sh --seed
 ```
 
-Handles venv creation, dependency install, migrations, and seeding in one step.
+Handles venv, install, migrations, and seeding in one step.
 
 **Seed admin credentials:** `admin@supportpilot.ai` / `Admin123!`
 
@@ -392,23 +395,23 @@ Handles venv creation, dependency install, migrations, and seeding in one step.
 ### Backend — `backend/.env`
 
 | Variable | Required | Description | Example |
-|:---|:---:|:---|:---|
+|:---------|:--------:|:------------|:--------|
 | `DATABASE_URL` | ✅ | PostgreSQL async connection string | `postgresql+asyncpg://user:pass@host/db` |
 | `SECRET_KEY` | ✅ | JWT signing key — `openssl rand -hex 32` | `a1b2c3...` |
 | `ALGORITHM` | ✅ | JWT algorithm | `HS256` |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | ✅ | Token lifetime | `10080` (7 days) |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | ✅ | Token lifetime in minutes | `10080` |
 | `OPENAI_API_KEY` | ✅ | OpenAI API key | `sk-...` |
 | `OPENAI_MODEL` | ✅ | Model identifier | `gpt-4o-mini` |
 | `CORS_ORIGINS` | ✅ | JSON array of allowed origins | `["http://localhost:3000"]` |
 | `ENVIRONMENT` | ✅ | Runtime flag | `development` or `production` |
-| `USE_KAFKA` | — | Event bus mode | `false` (dev) · `true` (prod) |
-| `KAFKA_BOOTSTRAP_SERVERS` | If Kafka | Kafka broker | `localhost:9092` |
+| `USE_KAFKA` | — | Event bus mode | `false` dev · `true` prod |
+| `KAFKA_BOOTSTRAP_SERVERS` | If Kafka | Kafka broker address | `localhost:9092` |
 
 ### Frontend — `frontend/.env.local`
 
 | Variable | Required | Description |
-|:---|:---:|:---|
-| `NEXT_PUBLIC_API_URL` | ✅ | Backend API base URL — e.g. `http://localhost:8000/api/v1` |
+|:---------|:--------:|:------------|
+| `NEXT_PUBLIC_API_URL` | ✅ | Backend API base URL — `http://localhost:8000/api/v1` |
 
 ---
 
@@ -418,21 +421,21 @@ Handles venv creation, dependency install, migrations, and seeding in one step.
 
 1. Push to GitHub
 2. Import at [vercel.com/new](https://vercel.com/new) — set **Root Directory** to `frontend`
-3. Add environment variable: `NEXT_PUBLIC_API_URL` → your backend URL
-4. Deploy — Vercel auto-detects Next.js and builds correctly
+3. Add `NEXT_PUBLIC_API_URL` → your backend URL
+4. Deploy — Vercel auto-detects Next.js
 
-### Backend — Hugging Face Spaces (live)
+### Backend — Hugging Face Spaces
 
 1. Create a new Space → SDK: **Docker**
-2. Add all environment variables under Space Settings → **Repository Secrets**
-3. Push the repo — the `Dockerfile` in `backend/` maps uvicorn to `$PORT` (default 7860 on HF)
+2. Add all env vars under Space Settings → **Repository Secrets**
+3. Push the backend:
 
 ```bash
 git remote add hf https://huggingface.co/spaces/<your-username>/<space-name>
 git push hf main
 ```
 
-### Backend — Docker (Railway / Fly.io / any container host)
+### Backend — Docker (Railway / Fly.io)
 
 ```bash
 cd backend
@@ -440,24 +443,22 @@ docker build -t supportpilot-backend .
 docker run -p 8000:8000 --env-file .env supportpilot-backend
 ```
 
-On **Railway**: connect your GitHub repo, set root directory to `backend` — Railway auto-detects the Dockerfile.
-
 ### Database — Neon
 
 1. Sign up at [neon.tech](https://neon.tech) and create a project
 2. Copy the pooled connection string
-3. Set it as `DATABASE_URL` and run `alembic upgrade head`
+3. Set `DATABASE_URL` and run `alembic upgrade head`
 
-> See [docs/deployment.md](docs/deployment.md) for the complete step-by-step walkthrough.
+> See [docs/deployment.md](docs/deployment.md) for the complete walkthrough.
 
 ---
 
 ## 🔌 API Overview
 
-All endpoints are prefixed with `/api/v1`. Full interactive docs at [`/docs`](https://zohairazmat-supportpilot-ai-fte.hf.space/docs).
+All endpoints are prefixed with `/api/v1`. &nbsp; Interactive docs → [`/docs`](https://zohairazmat-supportpilot-ai-fte.hf.space/docs)
 
 | Method | Endpoint | Auth | Description |
-|:---|:---|:---:|:---|
+|:------:|:---------|:----:|:------------|
 | `POST` | `/auth/signup` | Public | Register a new user |
 | `POST` | `/auth/login` | Public | Login and receive JWT |
 | `GET` | `/auth/me` | 🔒 | Get current user profile |
@@ -468,15 +469,15 @@ All endpoints are prefixed with `/api/v1`. Full interactive docs at [`/docs`](ht
 | `GET` | `/tickets` | 🔒 | List user's tickets |
 | `POST` | `/tickets` | 🔒 | Create a ticket |
 | `PATCH` | `/tickets/{id}` | 🔒 | Update ticket status / priority |
-| `POST` | `/support/submit` | Public | Web support form → AI response + ticket |
-| `GET` | `/admin/stats` | 👑 Admin | Platform statistics |
-| `GET` | `/admin/tickets` | 👑 Admin | All tickets (paginated, filterable) |
-| `PATCH` | `/admin/tickets/{id}` | 👑 Admin | Update any ticket |
-| `GET` | `/admin/conversations` | 👑 Admin | All conversations |
-| `GET` | `/admin/users` | 👑 Admin | All registered users |
-| `GET` | `/metrics/overview` | 👑 Admin | AI agent performance stats |
-| `GET` | `/metrics/channels` | 👑 Admin | Per-channel breakdown |
-| `GET` | `/metrics/escalations` | 👑 Admin | Escalation records and rates |
+| `POST` | `/support/submit` | Public | Web form → AI response + ticket |
+| `GET` | `/admin/stats` | 👑 | Platform statistics |
+| `GET` | `/admin/tickets` | 👑 | All tickets — paginated, filterable |
+| `PATCH` | `/admin/tickets/{id}` | 👑 | Update any ticket |
+| `GET` | `/admin/conversations` | 👑 | All conversations |
+| `GET` | `/admin/users` | 👑 | All registered users |
+| `GET` | `/metrics/overview` | 👑 | AI agent performance stats |
+| `GET` | `/metrics/channels` | 👑 | Per-channel breakdown |
+| `GET` | `/metrics/escalations` | 👑 | Escalation records and rates |
 
 > Full request/response schemas → [docs/api-spec.md](docs/api-spec.md)
 
@@ -484,12 +485,12 @@ All endpoints are prefixed with `/api/v1`. Full interactive docs at [`/docs`](ht
 
 ## 📖 Documentation
 
-| Document | What's inside |
-|:---|:---|
+| Document | What's Inside |
+|:---------|:--------------|
 | [docs/architecture.md](docs/architecture.md) | System design, data flow, and layer responsibilities |
 | [docs/api-spec.md](docs/api-spec.md) | Full API reference with request/response examples |
 | [docs/db-schema.md](docs/db-schema.md) | Database schema, entity relationships, and indexes |
-| [docs/ai-flow.md](docs/ai-flow.md) | AI agent design, prompt strategy, tool execution, and escalation logic |
+| [docs/ai-flow.md](docs/ai-flow.md) | AI agent design, prompt strategy, tool execution, escalation logic |
 | [docs/deployment.md](docs/deployment.md) | Step-by-step deployment guide — Vercel + HF Spaces + Neon |
 | [docs/specs/customer-support-spec.md](docs/specs/customer-support-spec.md) | AI behaviour rules, escalation triggers, channel definitions |
 | [docs/specs/discovery-log.md](docs/specs/discovery-log.md) | Engineering decisions and technical trade-off log |
@@ -501,13 +502,13 @@ All endpoints are prefixed with `/api/v1`. Full interactive docs at [`/docs`](ht
 ## 📈 Scaling Roadmap
 
 | Phase | What | Status |
-|:---|:---|:---:|
-| **Phase 1 — Digital FTE MVP** | Tool-based AI agent · event bus (dual-mode) · worker system · CRM schema · K8s manifests | ✅ Done |
-| **Phase 2 — Channels + Streaming** | Activate Gmail/WhatsApp adapters · OpenAI streaming · WebSocket real-time push | 🔜 Next |
-| **Phase 3 — Full Kafka** | `USE_KAFKA=true` · run `python -m workers.main` as isolated process · scale consumers | ⏳ On demand |
-| **Phase 4 — Kubernetes** | Apply `k8s/` manifests · HPA on Kafka lag (KEDA) · multi-tenant workspaces | 🏢 Enterprise |
+|:-----:|:-----|:------:|
+| **Phase 1 — Digital FTE MVP** | Tool-based AI agent · dual-mode event bus · worker system · CRM schema · K8s manifests | ✅ Done |
+| **Phase 2 — Channels + Streaming** | Activate Gmail/WhatsApp · OpenAI streaming · WebSocket real-time push | 🔜 Next |
+| **Phase 3 — Full Kafka** | `USE_KAFKA=true` · isolated worker process · scale consumers independently | ⏳ On demand |
+| **Phase 4 — Kubernetes** | Apply `k8s/` manifests · HPA on Kafka lag via KEDA · multi-tenant workspaces | 🏢 Enterprise |
 
-The event bus abstraction and worker system are already implemented and committed. Moving from inline to Kafka processing requires a single env var change. See [docs/specs/scaling-architecture.md](docs/specs/scaling-architecture.md).
+The event bus and worker system are already implemented — switching to Kafka requires one env var. See [docs/specs/scaling-architecture.md](docs/specs/scaling-architecture.md).
 
 ---
 
@@ -526,6 +527,19 @@ The event bus abstraction and worker system are already implemented and committe
 
 ---
 
+## ⭐ Support the Project
+
+If you found this project useful or impressive:
+
+| Action | Link |
+|:-------|:-----|
+| ⭐ **Star the repo** | Give it a star on GitHub — it helps others discover the project |
+| 🚀 **Try the live demo** | [supportpilot-ai-digital-fte.vercel.app](https://supportpilot-ai-digital-fte.vercel.app) |
+| 💼 **Connect on LinkedIn** | Share feedback or connect professionally |
+| 🐛 **Report a bug** | [Open an issue](../../issues) if you spot something broken |
+
+---
+
 ## 🤝 Contributing
 
 Contributions are welcome.
@@ -539,7 +553,7 @@ Contributions are welcome.
 
 **Code conventions:**
 - **Backend:** PEP 8, async/await throughout, typed function signatures
-- **Frontend:** TypeScript strict mode, functional components, Tailwind only (no inline styles)
+- **Frontend:** TypeScript strict mode, functional components, Tailwind only
 
 ---
 
@@ -555,8 +569,10 @@ MIT License — Copyright (c) 2026 Zohair
 
 <div align="center">
 
-Built with FastAPI · Next.js · OpenAI · Neon · Vercel · Hugging Face
+**Built with** &nbsp; FastAPI · Next.js · OpenAI · PostgreSQL · Vercel · Hugging Face
 
-⭐ **Star this repo if you found it useful**
+<br/>
+
+*If this project impressed you, a ⭐ star goes a long way — thank you!*
 
 </div>
