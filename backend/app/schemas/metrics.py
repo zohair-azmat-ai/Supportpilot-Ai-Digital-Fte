@@ -41,6 +41,8 @@ class MetricsOverviewResponse(BaseModel):
     sentiment_breakdown: List[SentimentCount] = []
     urgency_distribution: List[UrgencyCount] = []
     escalation_cause_breakdown: List[EscalationCauseCount] = []
+    similar_issue_count: int = 0
+    similar_issue_rate: float = 0.0
 
 
 class ChannelMetric(BaseModel):

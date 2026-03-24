@@ -359,6 +359,12 @@ _PATCHES = [
     ALTER TABLE agent_metrics
         ADD COLUMN IF NOT EXISTS escalation_cause VARCHAR(100)
     """,
+
+    # similar issue detection — tracks how often repeated issues are detected
+    """
+    ALTER TABLE agent_metrics
+        ADD COLUMN IF NOT EXISTS similar_issue_detected BOOLEAN DEFAULT false
+    """,
 ]
 
 

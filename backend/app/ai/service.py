@@ -53,6 +53,8 @@ class AIResponse:
     # Escalation engine output
     escalation_level: str = "none"    # "none" | "soft" | "urgent"
     escalation_cause: Optional[str] = None  # analytics label
+    # Similar issue detection
+    similar_issue_detected: bool = False
     # Agent-run metadata
     tools_called: List[str] = field(default_factory=list)
     iterations: int = 0

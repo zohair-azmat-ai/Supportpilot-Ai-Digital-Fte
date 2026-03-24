@@ -162,6 +162,7 @@ class SupportService:
                 "escalation_reason": ai_result.escalation_reason,
                 "escalation_level": getattr(ai_result, "escalation_level", "none"),
                 "escalation_cause": getattr(ai_result, "escalation_cause", None),
+                "similar_issue_detected": getattr(ai_result, "similar_issue_detected", False),
                 "ticket_created": ai_result.ticket_created,
                 "kb_articles_found": ai_result.kb_articles_found,
             })

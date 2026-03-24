@@ -88,6 +88,13 @@ class ConversationContext:
     message_count_in_session: int = 0   # number of prior user turns
     is_first_contact: bool = True
 
+    # --- Similar issue signals (cross-session ticket comparison) ---
+    similar_issue_found: bool = False
+    similar_issue_count: int = 0
+    related_ticket_ids: list = field(default_factory=list)
+    unresolved_similar_issue_exists: bool = False
+    similar_issue_summary: str = ""     # formatted for prompt injection
+
     # --- Content for prompt injection ---
     last_ai_reply: str = ""             # used to prevent verbatim repetition
     user_history_summary: str = ""      # formatted recent ticket/conv summary
@@ -119,11 +126,30 @@ class ConversationContext:
         if self.related_open_ticket_exists:
             lines.append("⚠ An open ticket already exists for this user. This may be an ongoing unresolved issue.")
 
+        if self.similar_issue_found:
+            status_label = (
+                "UNRESOLVED — do NOT repeat previous troubleshooting steps"
+                if self.unresolved_similar_issue_exists
+                else "previously resolved"
+            )
+            lines.append(
+                f"⚠ Similar issue history: {self.similar_issue_count} related "
+                f"ticket(s) found ({status_label})."
+            )
+            if self.unresolved_similar_issue_exists:
+                lines.append(
+                    "  Acknowledge the existing issue. Avoid generic troubleshooting. "
+                    "Consider escalation or referencing the open ticket."
+                )
+
         if self.prior_escalation_in_session:
             lines.append("⚠ A prior escalation occurred in this session. Treat with high priority.")
 
         if self.prior_escalation_in_history:
             lines.append("⚠ User has been escalated in a previous session. Handle carefully.")
+
+        if self.similar_issue_summary:
+            lines.append(f"\nSimilar past issues:\n{self.similar_issue_summary}")
 
         if self.user_history_summary:
             lines.append(f"\nRecent support history:\n{self.user_history_summary}")
@@ -171,7 +197,7 @@ class ConversationContextBuilder:
 
         # --- Cross-session signals from DB (safe fallback) ---
         if db is not None:
-            await self._fetch_user_history(ctx, db, user_id)
+            await self._fetch_user_history(ctx, db, user_id, user_message)
 
         return ctx
 
@@ -253,6 +279,7 @@ class ConversationContextBuilder:
         ctx: ConversationContext,
         db: Any,
         user_id: str,
+        user_message: str = "",
     ) -> None:
         """Fetch and summarise the user's recent tickets and conversations.
 
@@ -260,17 +287,20 @@ class ConversationContextBuilder:
           - ctx.related_open_ticket_exists
           - ctx.prior_escalation_in_history
           - ctx.user_history_summary
+          - ctx.similar_issue_found / similar_issue_count / related_ticket_ids
+          - ctx.unresolved_similar_issue_exists / similar_issue_summary
 
         All exceptions are caught — failure here never crashes the request.
         """
         try:
             from app.repositories.ticket import TicketRepository
             from app.repositories.conversation import ConversationRepository
+            from app.ai.similar_issue_detector import similar_issue_detector
 
             ticket_repo = TicketRepository(db)
             conv_repo = ConversationRepository(db)
 
-            tickets = await ticket_repo.get_by_user(user_id, skip=0, limit=6)
+            tickets = await ticket_repo.get_by_user(user_id, skip=0, limit=10)
             conversations = await conv_repo.get_by_user(user_id, skip=0, limit=4)
 
             lines: list[str] = []
@@ -298,6 +328,25 @@ class ConversationContextBuilder:
 
             if lines:
                 ctx.user_history_summary = "\n".join(lines)
+
+            # --- Similar issue detection ---
+            if tickets and user_message:
+                sim = similar_issue_detector.detect(
+                    user_message=user_message,
+                    tickets=tickets,
+                    current_conversation_id=None,  # no conversation yet at this stage
+                )
+                if sim.similar_issue_found:
+                    ctx.similar_issue_found = True
+                    ctx.similar_issue_count = sim.similar_issue_count
+                    ctx.related_ticket_ids = sim.related_ticket_ids
+                    ctx.unresolved_similar_issue_exists = sim.unresolved_similar_issue_exists
+                    ctx.similar_issue_summary = sim.similar_issue_summary
+                    logger.info(
+                        "Context: %d similar ticket(s) found (%s)",
+                        sim.similar_issue_count,
+                        "unresolved" if sim.unresolved_similar_issue_exists else "resolved",
+                    )
 
         except Exception as exc:  # noqa: BLE001
             logger.warning(

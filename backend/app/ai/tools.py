@@ -193,6 +193,9 @@ class AgentContext:
         # When set, send_response uses this reply/intent/confidence instead of the
         # model-generated message, ensuring the decision engine is the source of truth.
         self.predecided: Optional["SupportDecision"] = None
+        # Similar issue signals (populated from ConversationContext by SupportAgent)
+        self.similar_issue_found: bool = False
+        self.unresolved_similar_ticket_ids: list[str] = []
 
 
 # ---------------------------------------------------------------------------
@@ -359,10 +362,21 @@ class ToolExecutor:
         ctx.ticket_id = ticket.id
         ctx.ticket_created = True
 
-        return (
+        result = (
             f"Ticket created: ID={ticket.id[:8].upper()} "
             f"| title='{ticket.title}' | priority={ticket.priority}"
         )
+
+        # Inform the LLM if similar unresolved tickets exist for this user
+        if ctx.unresolved_similar_ticket_ids:
+            ids = ", ".join(t[:8].upper() for t in ctx.unresolved_similar_ticket_ids[:3])
+            result += (
+                f"\nNote: User has {len(ctx.unresolved_similar_ticket_ids)} similar "
+                f"unresolved ticket(s) from previous sessions: {ids}. "
+                "Consider referencing these in your response."
+            )
+
+        return result
 
     async def _escalate_to_human(self, args: dict, ctx: AgentContext) -> str:
         """Flag conversation for human escalation."""

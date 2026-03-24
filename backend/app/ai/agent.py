@@ -204,9 +204,19 @@ class SupportAgent:
         # Phase 2 — Tool loop: side effects (history, KB, ticket, escalate)
         # The effective_decision (merged LLM + escalation engine) is injected
         # so send_response and escalate_to_human use the final verdict.
+        # Similar issue signals from the context are also passed so _create_ticket
+        # can reference existing unresolved tickets when relevant.
         # ------------------------------------------------------------------
         ctx = AgentContext(db=db, user_id=user_id, conversation_id=conversation_id)
         ctx.predecided = effective_decision  # inject merged decision
+
+        if conv_context is not None:
+            ctx.similar_issue_found = conv_context.similar_issue_found
+            ctx.unresolved_similar_ticket_ids = (
+                conv_context.related_ticket_ids
+                if conv_context.unresolved_similar_issue_exists
+                else []
+            )
 
         executor = ToolExecutor()
         client = get_openai_client()
@@ -314,6 +324,9 @@ class SupportAgent:
             priority=effective_decision.priority,
             sentiment=effective_decision.sentiment,
             urgency=effective_decision.urgency,
+            similar_issue_detected=(
+                conv_context.similar_issue_found if conv_context is not None else False
+            ),
             tools_called=ctx.tools_called,
             iterations=ctx.iterations,
             kb_articles_found=ctx.kb_articles_found,

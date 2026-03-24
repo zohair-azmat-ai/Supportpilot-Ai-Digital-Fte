@@ -146,6 +146,7 @@ class MessageService:
             "escalation_reason": ai_result.escalation_reason,  # type: ignore[attr-defined]
             "escalation_level": getattr(ai_result, "escalation_level", "none"),
             "escalation_cause": getattr(ai_result, "escalation_cause", None),
+            "similar_issue_detected": getattr(ai_result, "similar_issue_detected", False),
             "ticket_created": getattr(ai_result, "ticket_created", False),
             "kb_articles_found": getattr(ai_result, "kb_articles_found", 0),
         })

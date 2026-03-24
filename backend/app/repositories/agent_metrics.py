@@ -125,6 +125,14 @@ class AgentMetricsRepository(BaseRepository[AgentMetrics]):
             for r in urgency_result
         ]
 
+        # --- Similar issue detection rate ---
+        sim_result = await self.db.execute(
+            select(func.count(AgentMetrics.id)).where(
+                AgentMetrics.similar_issue_detected == True  # noqa: E712
+            )
+        )
+        similar_issue_count = int(sim_result.scalar_one_or_none() or 0)
+
         # --- Escalation cause breakdown ---
         cause_result = await self.db.execute(
             select(
@@ -153,6 +161,8 @@ class AgentMetricsRepository(BaseRepository[AgentMetrics]):
             "sentiment_breakdown": sentiment_breakdown,
             "urgency_distribution": urgency_distribution,
             "escalation_cause_breakdown": escalation_cause_breakdown,
+            "similar_issue_count": similar_issue_count,
+            "similar_issue_rate": round(similar_issue_count / total, 4) if total else 0.0,
         }
 
     # ------------------------------------------------------------------
