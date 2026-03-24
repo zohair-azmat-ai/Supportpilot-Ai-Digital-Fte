@@ -75,3 +75,34 @@ class EscalationsResponse(BaseModel):
     total_escalations: int
     escalation_rate: float
     recent_escalations: List[EscalationRecord]
+
+
+class EventTypeCount(BaseModel):
+    event_type: str
+    count: int
+
+
+class ChannelEventCount(BaseModel):
+    channel: str
+    count: int
+
+
+class IntentEventCount(BaseModel):
+    intent: str
+    count: int
+
+
+class EventsOverviewResponse(BaseModel):
+    """Platform-wide event log analytics."""
+    total_events: int
+    event_type_counts: List[EventTypeCount]
+    channel_breakdown: List[ChannelEventCount]
+    intent_breakdown: List[IntentEventCount]
+    support_forms_submitted: int = 0
+    messages_received: int = 0
+    ai_responses_generated: int = 0
+    tickets_created: int = 0
+    tickets_updated: int = 0
+    escalations: int = 0
+    similar_issues_detected: int = 0
+    duplicate_tickets_prevented: int = 0

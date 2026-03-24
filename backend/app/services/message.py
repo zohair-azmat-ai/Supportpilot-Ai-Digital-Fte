@@ -13,6 +13,7 @@ from app.ai.agent import support_agent
 from app.models.message import Message
 from app.repositories.conversation import ConversationRepository
 from app.repositories.message import MessageRepository
+from app.services.event_logger import event_logger
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +71,15 @@ class MessageService:
             content=content,
         )
 
+        # Log: message received
+        await event_logger.log(
+            db,
+            event_logger.MESSAGE_RECEIVED,
+            user_id=user_id,
+            conversation_id=conversation_id,
+            channel=getattr(conversation, "channel", "web"),
+        )
+
         # 2. Build conversation history (messages before this one)
         history = [
             {"sender_type": m.sender_type, "content": m.content}
@@ -99,9 +109,49 @@ class MessageService:
             escalate=ai_result.should_escalate,
         )
 
+        # Log: AI response generated
+        await event_logger.log(
+            db,
+            event_logger.AI_RESPONSE_GENERATED,
+            user_id=user_id,
+            conversation_id=conversation_id,
+            channel=getattr(conversation, "channel", "web"),
+            intent=ai_result.intent,
+            sentiment=getattr(ai_result, "sentiment", None),
+            urgency=getattr(ai_result, "urgency", None),
+            confidence=ai_result.confidence,
+            details={
+                "escalated": ai_result.should_escalate,
+                "tools_called": ai_result.tools_called,
+            },
+        )
+
         # 5. Escalate conversation if the agent flagged it
         if ai_result.should_escalate and conversation.status == "active":
             await conv_repo.update(conversation_id, {"status": "escalated"})
+            await event_logger.log(
+                db,
+                event_logger.ISSUE_ESCALATED,
+                user_id=user_id,
+                conversation_id=conversation_id,
+                channel=getattr(conversation, "channel", "web"),
+                intent=ai_result.intent,
+                details={
+                    "escalation_reason": ai_result.escalation_reason,
+                    "escalation_level": getattr(ai_result, "escalation_level", "none"),
+                    "escalation_cause": getattr(ai_result, "escalation_cause", None),
+                },
+            )
+
+        if getattr(ai_result, "similar_issue_detected", False):
+            await event_logger.log(
+                db,
+                event_logger.SIMILAR_ISSUE_DETECTED,
+                user_id=user_id,
+                conversation_id=conversation_id,
+                channel=getattr(conversation, "channel", "web"),
+                details={"intent": ai_result.intent},
+            )
 
         # 6. Record metrics (fire-and-forget — failure does not affect response)
         try:

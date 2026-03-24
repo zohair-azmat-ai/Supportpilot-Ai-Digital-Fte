@@ -7,6 +7,7 @@ from app.models.ticket import Ticket
 from app.models.customer import Customer, CustomerIdentifier
 from app.models.knowledge_base import KnowledgeBase
 from app.models.agent_metrics import AgentMetrics
+from app.models.system_event import SystemEvent
 
 __all__ = [
     "User",
@@ -17,4 +18,5 @@ __all__ = [
     "CustomerIdentifier",
     "KnowledgeBase",
     "AgentMetrics",
+    "SystemEvent",
 ]

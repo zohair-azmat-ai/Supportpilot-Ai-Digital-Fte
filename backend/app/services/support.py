@@ -16,6 +16,7 @@ from app.repositories.ticket import TicketRepository
 from app.repositories.user import UserRepository
 from app.schemas.support import SupportFormRequest, SupportSubmitResponse
 from app.services.channel_identity import channel_identity_service
+from app.services.event_logger import event_logger
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +94,17 @@ class SupportService:
             content=data.message,
         )
 
+        # Log: support form submitted
+        await event_logger.log(
+            db,
+            event_logger.SUPPORT_FORM_SUBMITTED,
+            user_id=user.id,
+            conversation_id=conversation.id,
+            channel="web",
+            priority=data.priority,
+            details={"subject": data.subject, "category": data.category},
+        )
+
         # 4. Run AI agent (full tool workflow: history → KB → ticket → respond)
         t0 = time.monotonic()
         ai_result = await support_agent.run(
@@ -116,8 +128,48 @@ class SupportService:
             escalate=ai_result.should_escalate,
         )
 
+        # Log: AI response generated
+        await event_logger.log(
+            db,
+            event_logger.AI_RESPONSE_GENERATED,
+            user_id=user.id,
+            conversation_id=conversation.id,
+            channel="web",
+            intent=ai_result.intent,
+            sentiment=getattr(ai_result, "sentiment", None),
+            urgency=getattr(ai_result, "urgency", None),
+            confidence=ai_result.confidence,
+            details={
+                "escalated": ai_result.should_escalate,
+                "tools_called": ai_result.tools_called,
+            },
+        )
+
         if ai_result.should_escalate:
             await conv_repo.update(conversation.id, {"status": "escalated"})
+            await event_logger.log(
+                db,
+                event_logger.ISSUE_ESCALATED,
+                user_id=user.id,
+                conversation_id=conversation.id,
+                channel="web",
+                intent=ai_result.intent,
+                details={
+                    "escalation_reason": ai_result.escalation_reason,
+                    "escalation_level": getattr(ai_result, "escalation_level", "none"),
+                    "escalation_cause": getattr(ai_result, "escalation_cause", None),
+                },
+            )
+
+        if getattr(ai_result, "similar_issue_detected", False):
+            await event_logger.log(
+                db,
+                event_logger.SIMILAR_ISSUE_DETECTED,
+                user_id=user.id,
+                conversation_id=conversation.id,
+                channel="web",
+                details={"intent": ai_result.intent},
+            )
 
         # 6. Auto-create ticket (agent may also create one via tool; this is
         #    a fallback to ensure a ticket always exists after form submission)
@@ -141,6 +193,16 @@ class SupportService:
             if ai_result.should_escalate and ai_result.escalation_reason:
                 fallback_ticket_data["escalation_reason"] = ai_result.escalation_reason
             ticket = await ticket_repo.create(fallback_ticket_data)
+            await event_logger.log(
+                db,
+                event_logger.TICKET_CREATED,
+                user_id=user.id,
+                conversation_id=conversation.id,
+                ticket_id=ticket.id,
+                channel="web",
+                priority=ticket.priority,
+                details={"category": ticket.category, "title": ticket.title},
+            )
 
         # 7. Record metrics (non-blocking)
         try:

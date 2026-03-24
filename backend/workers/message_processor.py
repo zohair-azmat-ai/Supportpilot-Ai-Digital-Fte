@@ -106,6 +106,9 @@ class MessageProcessorWorker(BaseWorker):
         from app.repositories.message import MessageRepository
         from app.repositories.ticket import TicketRepository
         from app.repositories.user import UserRepository
+        from app.services.event_logger import event_logger
+
+        channel = event.get("channel", "web")
 
         user_repo = UserRepository(db)
         user = await user_repo.get_by_email(event["email"])
@@ -118,15 +121,25 @@ class MessageProcessorWorker(BaseWorker):
                     "role": "customer",
                 }
             )
+            logger.info(
+                "Worker: created new user user_id=%s email=%s",
+                user.id,
+                event["email"],
+            )
 
         conv_repo = ConversationRepository(db)
         conversation = await conv_repo.create(
             {
                 "user_id": user.id,
-                "channel": event.get("channel", "web"),
+                "channel": channel,
                 "subject": event.get("subject", "Support Request"),
                 "status": "active",
             }
+        )
+        logger.info(
+            "Worker: created conversation conversation_id=%s channel=%s",
+            conversation.id,
+            channel,
         )
 
         msg_repo = MessageRepository(db)
@@ -134,6 +147,16 @@ class MessageProcessorWorker(BaseWorker):
             conversation_id=conversation.id,
             sender_type="user",
             content=event["message"],
+        )
+
+        await event_logger.log(
+            db,
+            event_logger.SUPPORT_FORM_SUBMITTED,
+            user_id=user.id,
+            conversation_id=conversation.id,
+            channel=channel,
+            priority=event.get("priority"),
+            details={"subject": event.get("subject"), "category": event.get("category")},
         )
 
         # Run AI agent
@@ -144,6 +167,12 @@ class MessageProcessorWorker(BaseWorker):
             user_message=event["message"],
             conversation_history=[],
         )
+        logger.info(
+            "Worker: AI agent complete conversation_id=%s intent=%s escalated=%s",
+            conversation.id,
+            ai_result.intent,
+            ai_result.should_escalate,
+        )
 
         await msg_repo.create_message(
             conversation_id=conversation.id,
@@ -151,31 +180,95 @@ class MessageProcessorWorker(BaseWorker):
             content=ai_result.response,
             intent=ai_result.intent,
             ai_confidence=ai_result.confidence,
-            metadata=(
-                {
-                    "should_escalate": ai_result.should_escalate,
-                    "escalation_reason": ai_result.escalation_reason,
-                }
-                if ai_result.should_escalate
-                else None
-            ),
+            sentiment=getattr(ai_result, "sentiment", None),
+            urgency=getattr(ai_result, "urgency", None),
+            escalate=ai_result.should_escalate,
+        )
+
+        await event_logger.log(
+            db,
+            event_logger.AI_RESPONSE_GENERATED,
+            user_id=user.id,
+            conversation_id=conversation.id,
+            channel=channel,
+            intent=ai_result.intent,
+            sentiment=getattr(ai_result, "sentiment", None),
+            urgency=getattr(ai_result, "urgency", None),
+            confidence=ai_result.confidence,
+            details={
+                "escalated": ai_result.should_escalate,
+                "tools_called": ai_result.tools_called,
+            },
         )
 
         if ai_result.should_escalate:
             await conv_repo.update(conversation.id, {"status": "escalated"})
+            await event_logger.log(
+                db,
+                event_logger.ISSUE_ESCALATED,
+                user_id=user.id,
+                conversation_id=conversation.id,
+                channel=channel,
+                intent=ai_result.intent,
+                details={
+                    "escalation_reason": ai_result.escalation_reason,
+                    "escalation_level": getattr(ai_result, "escalation_level", "none"),
+                },
+            )
+            logger.info(
+                "Worker: conversation escalated conversation_id=%s reason=%s",
+                conversation.id,
+                ai_result.escalation_reason,
+            )
+
+        if getattr(ai_result, "similar_issue_detected", False):
+            await event_logger.log(
+                db,
+                event_logger.SIMILAR_ISSUE_DETECTED,
+                user_id=user.id,
+                conversation_id=conversation.id,
+                channel=channel,
+                details={"intent": ai_result.intent},
+            )
 
         # Agent may have created ticket; if not, create one
         ticket_repo = TicketRepository(db)
-        ticket = await ticket_repo.create(
-            {
-                "user_id": user.id,
-                "conversation_id": conversation.id,
-                "title": event.get("subject", "Support Request"),
-                "description": event["message"],
-                "category": event.get("category", "general"),
-                "priority": event.get("priority", "medium"),
-            }
-        )
+        existing = await ticket_repo.get_by_conversation(conversation.id)
+        if existing:
+            ticket = existing[0]
+            logger.info(
+                "Worker: existing ticket found ticket_id=%s conversation_id=%s",
+                ticket.id,
+                conversation.id,
+            )
+        else:
+            ticket = await ticket_repo.create(
+                {
+                    "user_id": user.id,
+                    "conversation_id": conversation.id,
+                    "title": event.get("subject", "Support Request"),
+                    "description": event["message"],
+                    "category": getattr(ai_result, "category", event.get("category", "general")),
+                    "priority": getattr(ai_result, "priority", event.get("priority", "medium")),
+                    "sentiment": getattr(ai_result, "sentiment", None),
+                    "urgency": getattr(ai_result, "urgency", None),
+                }
+            )
+            await event_logger.log(
+                db,
+                event_logger.TICKET_CREATED,
+                user_id=user.id,
+                conversation_id=conversation.id,
+                ticket_id=ticket.id,
+                channel=channel,
+                priority=ticket.priority,
+                details={"category": ticket.category, "title": ticket.title},
+            )
+            logger.info(
+                "Worker: ticket created ticket_id=%s conversation_id=%s",
+                ticket.id,
+                conversation.id,
+            )
 
         confirmation = (
             f"Thank you for contacting SupportPilot, {event['name']}. "
@@ -195,6 +288,7 @@ class MessageProcessorWorker(BaseWorker):
         from app.ai.agent import support_agent
         from app.repositories.conversation import ConversationRepository
         from app.repositories.message import MessageRepository
+        from app.services.event_logger import event_logger
 
         conv_repo = ConversationRepository(db)
         conversation = await conv_repo.get_with_messages(event["conversation_id"])
@@ -204,11 +298,21 @@ class MessageProcessorWorker(BaseWorker):
                 f"Conversation not found: {event['conversation_id']}"
             )
 
+        channel = getattr(conversation, "channel", "web")
+
         msg_repo = MessageRepository(db)
         user_message = await msg_repo.create_message(
             conversation_id=event["conversation_id"],
             sender_type="user",
             content=event["content"],
+        )
+
+        await event_logger.log(
+            db,
+            event_logger.MESSAGE_RECEIVED,
+            user_id=event.get("user_id"),
+            conversation_id=event["conversation_id"],
+            channel=channel,
         )
 
         history = [
@@ -223,6 +327,12 @@ class MessageProcessorWorker(BaseWorker):
             user_message=event["content"],
             conversation_history=history,
         )
+        logger.info(
+            "Worker: AI agent complete conversation_id=%s intent=%s escalated=%s",
+            event["conversation_id"],
+            ai_result.intent,
+            ai_result.should_escalate,
+        )
 
         ai_message = await msg_repo.create_message(
             conversation_id=event["conversation_id"],
@@ -230,19 +340,57 @@ class MessageProcessorWorker(BaseWorker):
             content=ai_result.response,
             intent=ai_result.intent,
             ai_confidence=ai_result.confidence,
-            metadata=(
-                {
-                    "should_escalate": ai_result.should_escalate,
-                    "escalation_reason": ai_result.escalation_reason,
-                }
-                if ai_result.should_escalate
-                else None
-            ),
+            sentiment=getattr(ai_result, "sentiment", None),
+            urgency=getattr(ai_result, "urgency", None),
+            escalate=ai_result.should_escalate,
+        )
+
+        await event_logger.log(
+            db,
+            event_logger.AI_RESPONSE_GENERATED,
+            user_id=event.get("user_id"),
+            conversation_id=event["conversation_id"],
+            channel=channel,
+            intent=ai_result.intent,
+            sentiment=getattr(ai_result, "sentiment", None),
+            urgency=getattr(ai_result, "urgency", None),
+            confidence=ai_result.confidence,
+            details={
+                "escalated": ai_result.should_escalate,
+                "tools_called": ai_result.tools_called,
+            },
         )
 
         if ai_result.should_escalate and conversation.status == "active":
             await conv_repo.update(
                 event["conversation_id"], {"status": "escalated"}
+            )
+            await event_logger.log(
+                db,
+                event_logger.ISSUE_ESCALATED,
+                user_id=event.get("user_id"),
+                conversation_id=event["conversation_id"],
+                channel=channel,
+                intent=ai_result.intent,
+                details={
+                    "escalation_reason": ai_result.escalation_reason,
+                    "escalation_level": getattr(ai_result, "escalation_level", "none"),
+                },
+            )
+            logger.info(
+                "Worker: conversation escalated conversation_id=%s reason=%s",
+                event["conversation_id"],
+                ai_result.escalation_reason,
+            )
+
+        if getattr(ai_result, "similar_issue_detected", False):
+            await event_logger.log(
+                db,
+                event_logger.SIMILAR_ISSUE_DETECTED,
+                user_id=event.get("user_id"),
+                conversation_id=event["conversation_id"],
+                channel=channel,
+                details={"intent": ai_result.intent},
             )
 
         return {

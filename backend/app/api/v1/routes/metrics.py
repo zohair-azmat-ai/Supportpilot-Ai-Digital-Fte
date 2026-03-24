@@ -22,6 +22,7 @@ from app.repositories.agent_metrics import AgentMetricsRepository
 from app.schemas.metrics import (
     ChannelMetricsResponse,
     EscalationsResponse,
+    EventsOverviewResponse,
     MetricsOverviewResponse,
 )
 
@@ -101,3 +102,30 @@ async def get_escalations(
     repo = AgentMetricsRepository(db)
     data = await repo.get_escalation_stats(limit=limit)
     return EscalationsResponse(**data)
+
+
+@router.get(
+    "/events",
+    response_model=EventsOverviewResponse,
+    summary="Platform-wide event log analytics",
+)
+async def get_events_overview(
+    db: AsyncSession = Depends(get_db),
+    _: object = Depends(get_current_admin_user),
+) -> EventsOverviewResponse:
+    """
+    Return analytics derived from the system_events log.
+
+    Includes:
+    - Total events logged across all types
+    - Per event-type counts
+    - Per-channel breakdown
+    - Top intents from AI response events
+    - Convenience counters for key event types (forms submitted, messages,
+      AI responses, tickets, escalations, similar issues, duplicates prevented)
+    """
+    from app.repositories.system_event import SystemEventRepository
+
+    repo = SystemEventRepository(db)
+    data = await repo.get_events_overview()
+    return EventsOverviewResponse(**data)
