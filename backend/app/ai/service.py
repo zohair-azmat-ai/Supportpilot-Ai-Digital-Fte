@@ -32,9 +32,22 @@ class AIResponse:
     ticket_created: bool = False
 
 
+_GRATITUDE_KEYWORDS = frozenset({
+    "thank you", "thanks", "appreciate", "thank u", "thx", "ty",
+    "that helped", "helpful", "problem solved", "sorted", "all good",
+})
+_REPEATED_LOGIN_KEYWORDS = frozenset({
+    "multiple attempts", "tried multiple", "tried again", "keep trying",
+    "still can't", "still cannot", "account locked", "locked", "blocked",
+    "already tried", "tried everything", "attempts",
+})
+_PASSWORD_KEYWORDS = frozenset({
+    "password", "forgot password", "reset password", "change password",
+    "lost password", "forgot my password",
+})
 _LOGIN_KEYWORDS = frozenset({
-    "login", "log in", "sign in", "signin", "password", "forgot password",
-    "reset password", "account", "credentials", "locked out", "access",
+    "login", "log in", "sign in", "signin", "can't login", "cannot login",
+    "credentials", "locked out", "access denied", "access",
 })
 _BILLING_KEYWORDS = frozenset({
     "payment", "refund", "billing", "charge", "charged", "invoice",
@@ -45,40 +58,102 @@ _BILLING_KEYWORDS = frozenset({
 def _build_fallback_response(user_message: str = "") -> AIResponse:
     """Return a context-aware fallback when the AI service is unreachable.
 
-    Keyword-matches the user message to pick a relevant reply instead of
-    the generic "temporary issue" string.  Always sets should_escalate=True
-    so a human agent is notified when the AI is unavailable.
+    Checks four intent cases in priority order: gratitude → repeated login →
+    password → login → billing → general.  Always escalates except for gratitude.
     """
     msg = user_message.lower()
 
-    if any(k in msg for k in _LOGIN_KEYWORDS):
-        response = (
-            "I understand you're facing a login issue. Let me help you troubleshoot this. "
-            "Please try resetting your password or checking your credentials. "
-            "If the issue continues, I will escalate this to a human support agent immediately."
+    # 1. Gratitude — close the conversation politely, no escalation needed
+    if any(k in msg for k in _GRATITUDE_KEYWORDS):
+        return AIResponse(
+            response=(
+                "Glad I could help! 😊\n"
+                "If you need anything else, feel free to reach out anytime."
+            ),
+            intent="gratitude",
+            confidence=0.8,
+            should_escalate=False,
         )
-        intent = "account"
-    elif any(k in msg for k in _BILLING_KEYWORDS):
-        response = (
-            "I see you're having a billing-related issue. Let me assist you with this. "
-            "Please check your payment status or recent transactions. "
-            "If needed, I can escalate this to our billing team."
-        )
-        intent = "billing"
-    else:
-        response = (
-            "Thank you for reaching out. I'm here to help you with your request. "
-            "Let me analyze your issue and provide the best possible solution. "
-            "If needed, I will connect you with a human agent."
-        )
-        intent = "general"
 
+    # 2. Repeated login attempts — account locked / multiple failures
+    if (
+        any(k in msg for k in _REPEATED_LOGIN_KEYWORDS)
+        and any(k in msg for k in _LOGIN_KEYWORDS | _PASSWORD_KEYWORDS)
+    ):
+        return AIResponse(
+            response=(
+                "It looks like there may have been multiple login attempts. "
+                "Please try the following:\n\n"
+                "• Wait 15–30 minutes before retrying\n"
+                "• Disable any VPN or proxy\n"
+                "• Ensure your device time is synced\n\n"
+                "Still not working? I'll escalate this to our account team right away."
+            ),
+            intent="account",
+            confidence=0.5,
+            should_escalate=True,
+            escalation_reason="Multiple login attempts detected — account may be locked",
+        )
+
+    # 3. Password reset / recovery
+    if any(k in msg for k in _PASSWORD_KEYWORDS):
+        return AIResponse(
+            response=(
+                "I can help you recover your account. Please follow these steps:\n\n"
+                "1. Click **Forgot Password** on the login page\n"
+                "2. Enter your registered email\n"
+                "3. Check your inbox or spam folder for the reset link\n\n"
+                "If you don't receive it within a few minutes, "
+                "let me know and I'll assist further."
+            ),
+            intent="account",
+            confidence=0.5,
+            should_escalate=True,
+            escalation_reason="AI service unavailable — password recovery fallback provided",
+        )
+
+    # 4. General login / sign-in issue
+    if any(k in msg for k in _LOGIN_KEYWORDS):
+        return AIResponse(
+            response=(
+                "I understand you're having trouble logging in. "
+                "Let's try a few quick steps:\n\n"
+                "• Reset your password using the 'Forgot Password' option\n"
+                "• Check your email (including spam folder) for the reset link\n"
+                "• Try a different browser or clear your cache\n\n"
+                "If the issue continues, I'll escalate this to our support team immediately."
+            ),
+            intent="account",
+            confidence=0.5,
+            should_escalate=True,
+            escalation_reason="AI service unavailable — login troubleshoot fallback provided",
+        )
+
+    # 5. Billing issue
+    if any(k in msg for k in _BILLING_KEYWORDS):
+        return AIResponse(
+            response=(
+                "I see you're having a billing-related issue. Let me assist you with this. "
+                "Please check your payment status or recent transactions. "
+                "If needed, I can escalate this to our billing team."
+            ),
+            intent="billing",
+            confidence=0.5,
+            should_escalate=True,
+            escalation_reason="AI service unavailable — billing fallback provided",
+        )
+
+    # 6. General fallback
     return AIResponse(
-        response=response,
-        intent=intent,
+        response=(
+            "Thank you for reaching out. I'm here to help you with your request. "
+            "Let me look into this and provide the best possible solution. "
+            "If needed, I will connect you with a human agent right away."
+        ),
+        intent="general",
         confidence=0.4,
         should_escalate=True,
-        escalation_reason="AI service unavailable — context-aware fallback provided",
+        escalation_reason="AI service unavailable — general fallback provided",
     )
 
 

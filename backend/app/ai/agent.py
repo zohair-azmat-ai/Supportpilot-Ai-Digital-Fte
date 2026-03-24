@@ -125,29 +125,29 @@ _STOP_WORDS = frozenset({
 # --- Response variant pools (3 variants each, never repeat the last reply) ---
 
 _GRATITUDE_VARIANTS = [
-    "You're welcome! 😊\nIf you need any further help, feel free to reach out anytime.",
+    "Glad I could help! 😊\nIf you need anything else, feel free to reach out anytime.",
     "Happy to help! 😊\nDon't hesitate to get in touch if anything else comes up.",
-    "Glad I could assist! 😊\nWe're here whenever you need us — take care!",
+    "You're welcome! 😊\nWe're here whenever you need us — take care!",
 ]
 
 _ACCOUNT_TROUBLESHOOT_VARIANTS = [
+    # Variant 0 — login issue (bullet-point flow)
     (
-        "I can help you get back into your account. Here are the steps to try:\n\n"
+        "I understand you're having trouble logging in. Let's try a few quick steps:\n\n"
+        "• Reset your password using the 'Forgot Password' option\n"
+        "• Check your email (including spam folder) for the reset link\n"
+        "• Try a different browser or clear your cache\n\n"
+        "If the issue continues, I'll escalate this to our support team immediately."
+    ),
+    # Variant 1 — password recovery (numbered steps)
+    (
+        "I can help you recover your account. Please follow these steps:\n\n"
         "1. Click **Forgot Password** on the login page\n"
-        "2. Enter your registered email address and submit\n"
-        "3. Check your inbox — and your spam/junk folder — for a reset link\n"
-        "4. If the email doesn't arrive within 5 minutes, make sure you're using "
-        "the email address you signed up with\n\n"
-        "Let me know if any of these work, or if the problem continues."
+        "2. Enter your registered email\n"
+        "3. Check your inbox or spam folder for the reset link\n\n"
+        "If you don't receive it within a few minutes, let me know and I'll assist further."
     ),
-    (
-        "Happy to help you sort out your login. Please try the following:\n\n"
-        "• Go to the sign-in page and select **Reset Password**\n"
-        "• Enter your email — a reset link will arrive within a few minutes\n"
-        "• Check both inbox and spam; sometimes these emails get filtered\n"
-        "• Try a different browser or clear your cache if the link doesn't work\n\n"
-        "Still stuck after trying these? Just let me know and I'll escalate this right away."
-    ),
+    # Variant 2 — incognito / cache / SSO angle
     (
         "Let's get your account access sorted. A few things to check:\n\n"
         "1. Use the **Forgot Password** option on the login screen\n"
@@ -176,15 +176,16 @@ _ACCOUNT_ESCALATION_VARIANTS = [
 ]
 
 _ACCOUNT_ALT_VARIANTS = [
+    # Variant 0 — repeated login attempts (exact spec response)
     (
-        "Let's try another approach — it's possible your account has been temporarily locked "
-        "after multiple failed attempts.\n\n"
-        "1. Wait 15–30 minutes before trying again (auto-lock resets after a cooldown)\n"
-        "2. Try signing in via a different browser or incognito/private mode\n"
-        "3. Clear your browser's cookies and cached data for this site\n"
-        "4. If you use SSO (Google/Microsoft login), try that option instead\n\n"
-        "Let me know if any of these work — if not, I'll escalate immediately."
+        "It looks like there may have been multiple login attempts. "
+        "Please try the following:\n\n"
+        "• Wait 15–30 minutes before retrying\n"
+        "• Disable any VPN or proxy\n"
+        "• Ensure your device time is synced\n\n"
+        "Still not working? I'll escalate this to our account team right away."
     ),
+    # Variant 1 — locked account + browser/device alternatives
     (
         "Let me suggest a different approach this time.\n\n"
         "• Your account may be locked due to too many failed attempts — wait 15–30 minutes\n"

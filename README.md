@@ -46,7 +46,7 @@
 Admin portal  →  admin@supportpilot.ai  /  Admin123!
 ```
 
-> **Note:** Backend runs on Hugging Face Spaces free tier — first request may take 30–60 s to cold-start.
+> ⚠️ **First request may take 30–60 seconds due to cold start (HF Spaces free tier)**
 
 ---
 
@@ -54,15 +54,15 @@ Admin portal  →  admin@supportpilot.ai  /  Admin123!
 
 This is not a tutorial project or a hackathon demo. It is a **production-style monorepo** built to the standard of a well-engineered SaaS company.
 
-| | What | Why it matters |
-|:---:|:---|:---|
-| 🏗️ | **Full-stack, live deployment** | Frontend on Vercel, backend on HF Spaces, DB on Neon — all wired together and publicly accessible |
-| 🤖 | **Tool-based AI agent** | Runs a strict 5-tool reasoning loop — every decision is logged, auditable, and explainable |
-| 📊 | **Dual portal system** | Separate customer and admin dashboards with JWT role-based access control |
-| 🔌 | **Event-driven architecture** | Dual-mode event bus — InMemoryBus for dev, KafkaEventBus for prod — one env var to switch |
-| 📡 | **Multi-channel design** | Channel adapter pattern normalises Web, Gmail, and WhatsApp into one pipeline |
-| 📈 | **CRM-grade schema** | 8 relational tables: users, customers, conversations, messages, tickets, KB, agent_metrics |
-| ☸️ | **Scale-ready from day one** | Kafka workers and Kubernetes manifests already committed for the next phase |
+| &nbsp; | What | Why it matters |
+|:------:|:-----|:---------------|
+| 🏗️ | **Full-stack, live deployment** | **Production-ready infrastructure** — Frontend on Vercel, backend on HF Spaces, DB on Neon, all wired together and publicly accessible |
+| 🤖 | **Tool-based AI agent** | **Auditable reasoning loop** — runs a strict 5-tool sequence; every decision is logged and explainable |
+| 📊 | **Dual portal system** | **Role-based access control** — separate customer and admin dashboards secured with JWT |
+| 🔌 | **Event-driven architecture** | **Zero-code bus swap** — InMemoryBus for dev, KafkaEventBus for prod, one env var to switch |
+| 📡 | **Multi-channel design** | **Channel-agnostic pipeline** — adapter pattern normalises Web, Gmail, and WhatsApp into one flow |
+| 📈 | **CRM-grade schema** | **8 relational tables** — users, customers, conversations, messages, tickets, KB, agent_metrics |
+| ☸️ | **Scale-ready from day one** | **Kubernetes-ready** — Kafka workers and K8s manifests already committed for the next phase |
 
 ---
 
@@ -82,7 +82,7 @@ This is not a tutorial project or a hackathon demo. It is a **production-style m
 - [📖 Documentation](#-documentation)
 - [📈 Scaling Roadmap](#-scaling-roadmap)
 - [🔮 Future Features](#-future-features)
-- [⭐ Support the Project](#-support-the-project)
+- [⭐ Support & Connect](#-support--connect)
 - [🤝 Contributing](#-contributing)
 - [📄 License](#-license)
 
@@ -94,33 +94,33 @@ This is not a tutorial project or a hackathon demo. It is a **production-style m
 
 | Feature | Description |
 |:--------|:------------|
-| **🤖 AI-Powered Chat** | Real-time GPT-4o-mini conversations with intent detection, context memory, and smart escalation |
-| **📝 Web Support Form** | No account required — submit a request and receive an AI response with a tracked ticket instantly |
-| **🎫 Ticket Dashboard** | Track every request with status filters (open → in-progress → resolved), priority, and categories |
-| **💬 Conversation History** | Threaded message history with per-message AI confidence scores and intent labels |
-| **🔒 Secure Auth** | JWT-based signup and login with role-based access control (customer / admin) |
+| **AI-Powered Chat** | Real-time GPT-4o-mini conversations with intent detection, context memory, and smart escalation |
+| **Web Support Form** | No account required — submit a request and receive an AI response with a tracked ticket instantly |
+| **Ticket Dashboard** | Track every request with status filters (open → in-progress → resolved), priority, and categories |
+| **Conversation History** | Threaded message history with per-message AI confidence scores and intent labels |
+| **Secure Auth** | JWT-based signup and login with role-based access control (customer / admin) |
 
 ### Admin Portal
 
 | Feature | Description |
 |:--------|:------------|
-| **📊 Analytics Dashboard** | Live stats — users, open tickets, active conversations, resolution rate, escalation counts |
-| **🎫 Ticket Management** | Full CRUD with inline status updates, priority management, and category routing |
-| **💬 Conversation Explorer** | Browse all conversations, inspect threads, view AI confidence and escalation flags |
-| **👥 User Management** | View all registered users, roles, account status, and activity |
+| **Analytics Dashboard** | Live stats — users, open tickets, active conversations, resolution rate, escalation counts |
+| **Ticket Management** | Full CRUD with inline status updates, priority management, and category routing |
+| **Conversation Explorer** | Browse all conversations, inspect threads, view AI confidence and escalation flags |
+| **User Management** | View all registered users, roles, account status, and activity |
 
 ### Platform & AI
 
 | Feature | Description |
 |:--------|:------------|
-| **🧠 5-Tool AI Agent** | Strict tool order: `get_history` → `search_KB` → `create_ticket` → `[escalate]` → `send_response` |
-| **🚨 Smart Escalation** | Detects billing disputes, legal language, repeated issues, and frustration signals automatically |
-| **🏷️ Intent Classification** | 7 categories (technical, billing, account, complaint, feature_request, general, urgent) + confidence |
-| **🧠 Conversation Memory** | Pre-flight check detects repeated topics across history before calling OpenAI |
-| **⚡ Event-Driven Bus** | InMemoryEventBus for dev · KafkaEventBus for prod — zero code change to switch |
-| **📚 Knowledge Base** | Keyword-searchable articles with pgvector-ready `embedding` field for Phase 2 RAG |
-| **📈 Agent Metrics** | Every AI call logged: intent, confidence, tools, response time, escalation status |
-| **📡 Multi-Channel** | Web live · Gmail scaffolded · WhatsApp scaffolded — activate with credentials only |
+| **5-Tool AI Agent** | Strict tool order: `get_history` → `search_KB` → `create_ticket` → `[escalate]` → `send_response` |
+| **Smart Escalation** | Detects billing disputes, legal language, repeated issues, and frustration signals automatically |
+| **Intent Classification** | 7 categories (technical, billing, account, complaint, feature_request, general, urgent) + confidence |
+| **Conversation Memory** | Pre-flight check detects repeated topics across history before calling OpenAI |
+| **Event-Driven Bus** | InMemoryEventBus for dev · KafkaEventBus for prod — zero code change to switch |
+| **Knowledge Base** | Keyword-searchable articles with pgvector-ready `embedding` field for Phase 2 RAG |
+| **Agent Metrics** | Every AI call logged: intent, confidence, tools, response time, escalation status |
+| **Multi-Channel** | Web live · Gmail scaffolded · WhatsApp scaffolded — activate with credentials only |
 
 ---
 
@@ -527,16 +527,14 @@ The event bus and worker system are already implemented — switching to Kafka r
 
 ---
 
-## ⭐ Support the Project
+## ⭐ Support & Connect
 
-If you found this project useful or impressive:
+If you like this project:
 
-| Action | Link |
-|:-------|:-----|
-| ⭐ **Star the repo** | Give it a star on GitHub — it helps others discover the project |
-| 🚀 **Try the live demo** | [supportpilot-ai-digital-fte.vercel.app](https://supportpilot-ai-digital-fte.vercel.app) |
-| 💼 **Connect on LinkedIn** | Share feedback or connect professionally |
-| 🐛 **Report a bug** | [Open an issue](../../issues) if you spot something broken |
+- ⭐ **Star the repository** — it helps others discover the work
+- 🚀 **Try the live demo** — [supportpilot-ai-digital-fte.vercel.app](https://supportpilot-ai-digital-fte.vercel.app)
+- 💼 **Connect on LinkedIn** — open for job opportunities and professional connections
+- 📩 **Open an issue** — [report a bug or suggest a feature](../../issues)
 
 ---
 
