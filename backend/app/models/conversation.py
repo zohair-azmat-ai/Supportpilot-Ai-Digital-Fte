@@ -39,6 +39,14 @@ class Conversation(Base):
         default="active",
     )
     subject: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    # Email: Gmail thread ID (groups inbound replies into same conversation).
+    # WhatsApp: sender E.164 phone number (one active conversation per sender).
+    # Web: null (each conversation is independent).
+    thread_id: Mapped[Optional[str]] = mapped_column(
+        String(500),
+        nullable=True,
+        index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

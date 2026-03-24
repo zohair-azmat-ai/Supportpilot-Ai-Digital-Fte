@@ -173,6 +173,10 @@ class WhatsAppChannelAdapter(BaseChannelAdapter):
             body=body,
             channel=self.channel_name,
             priority_hint=_infer_priority(body),
+            # thread_id for WhatsApp = sender phone (one active convo per sender)
+            thread_id=sender_phone,
+            external_id=message_sid,
+            sender_phone=sender_phone,
             raw_payload={
                 **payload,
                 "sender_phone": sender_phone,

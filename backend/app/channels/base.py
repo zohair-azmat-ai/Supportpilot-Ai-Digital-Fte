@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Optional
 
 
 # ---------------------------------------------------------------------------
@@ -26,6 +26,15 @@ class InboundMessage:
 
     All channel adapters normalise their raw payload into this structure
     before passing it to the SupportService.
+
+    Channel-specific fields
+    -----------------------
+    thread_id   : Email Gmail thread ID — used to resume the same conversation
+                  thread across multiple inbound emails. Also used as a WhatsApp
+                  session key (sender phone) for session continuity.
+    external_id : Message-level reference from the originating channel.
+                  Gmail message ID for email; Twilio MessageSid for WhatsApp.
+    sender_phone: E.164 phone number for WhatsApp messages.  None for other channels.
     """
 
     # Who sent it
@@ -41,6 +50,11 @@ class InboundMessage:
 
     # Optional priority hint from the channel (e.g., email subject keywords)
     priority_hint: str = "medium"  # 'low' | 'medium' | 'high' | 'urgent'
+
+    # Channel-specific threading / session keys
+    thread_id: Optional[str] = None     # Gmail thread ID or WhatsApp session key
+    external_id: Optional[str] = None   # Gmail message ID or Twilio MessageSid
+    sender_phone: Optional[str] = None  # E.164 phone — WhatsApp only
 
     # Raw channel-specific payload preserved for audit / debugging
     raw_payload: dict[str, Any] = field(default_factory=dict)

@@ -218,57 +218,105 @@ async def _run_support_pipeline(
     """
     Run the full AI support pipeline for an inbound channel message.
 
-    1. Find or create an active conversation for this user+channel.
-    2. Store the inbound message.
-    3. Run the AI agent (get_customer_history → KB → ticket → respond).
-    4. Store and return the AI reply.
-    5. Record metrics.
+    Conversation lookup strategy (in order):
+      1. If inbound.thread_id is set — resume conversation by thread_id.
+         Handles email thread continuity (same Gmail threadId) and WhatsApp
+         session continuity (same sender phone).
+      2. Fallback — find the most recent active conversation for user+channel.
+      3. If none found — create a new conversation.
+
+    After the AI runs, stores all AI signals (sentiment, urgency, escalate),
+    records full analytics metrics, logs platform events, and returns the
+    AI response text.
     """
     from app.ai.agent import support_agent
     from app.repositories.conversation import ConversationRepository
     from app.repositories.message import MessageRepository
     from app.repositories.agent_metrics import AgentMetricsRepository
+    from app.services.event_logger import event_logger
 
     conv_repo = ConversationRepository(db)
     msg_repo = MessageRepository(db)
 
-    # Find the most recent active conversation for this user on this channel,
-    # or create a new one
-    all_convs = await conv_repo.get_by_user(user.id, skip=0, limit=10)
-    active_conv = next(
-        (c for c in all_convs if c.status == "active" and c.channel == channel),
-        None,
-    )
+    # ------------------------------------------------------------------
+    # 1. Find or create conversation
+    # ------------------------------------------------------------------
 
+    active_conv = None
+
+    # Priority: resume by thread_id (email thread / WhatsApp session)
+    if inbound.thread_id:
+        active_conv = await conv_repo.get_by_thread_id(inbound.thread_id)
+        if active_conv:
+            logger.info(
+                "Resumed conversation by thread_id | channel=%s conv_id=%s thread_id=%s",
+                channel,
+                active_conv.id,
+                inbound.thread_id,
+            )
+
+    # Fallback: most recent active conversation for this user+channel
     if active_conv is None:
-        active_conv = await conv_repo.create({
+        active_conv = await conv_repo.get_active_by_user_channel(user.id, channel)
+
+    # Last resort: create a new conversation
+    if active_conv is None:
+        conv_data: dict[str, Any] = {
             "user_id": user.id,
             "channel": channel,
             "subject": inbound.subject[:500] if inbound.subject else None,
             "status": "active",
-        })
+        }
+        if inbound.thread_id:
+            conv_data["thread_id"] = inbound.thread_id
+        active_conv = await conv_repo.create(conv_data)
         logger.info(
-            "Created new conversation for %s channel | conv_id=%s user_id=%s",
+            "Created new %s conversation | conv_id=%s user_id=%s thread_id=%s",
             channel,
             active_conv.id,
             user.id,
+            inbound.thread_id,
         )
 
-    # Store user message
+    # ------------------------------------------------------------------
+    # 2. Store inbound user message with channel metadata
+    # ------------------------------------------------------------------
+
+    user_msg_metadata: dict[str, Any] = {"channel": channel}
+    if inbound.thread_id:
+        user_msg_metadata["thread_id"] = inbound.thread_id
+    if inbound.external_id:
+        user_msg_metadata["external_id"] = inbound.external_id
+    if inbound.sender_phone:
+        user_msg_metadata["sender_phone"] = inbound.sender_phone
+
     await msg_repo.create_message(
         conversation_id=active_conv.id,
         sender_type="user",
         content=inbound.body,
+        metadata=user_msg_metadata,
     )
 
-    # Build history
+    # Log: message received
+    await event_logger.log(
+        db,
+        event_logger.MESSAGE_RECEIVED,
+        user_id=user.id,
+        conversation_id=active_conv.id,
+        channel=channel,
+        details=user_msg_metadata,
+    )
+
+    # ------------------------------------------------------------------
+    # 3. Build history and run agent
+    # ------------------------------------------------------------------
+
     conv_with_msgs = await conv_repo.get_with_messages(active_conv.id)
     history = [
         {"sender_type": m.sender_type, "content": m.content}
         for m in (conv_with_msgs.messages if conv_with_msgs else [])
     ]
 
-    # Run agent
     t0 = time.monotonic()
     ai_result = await support_agent.run(
         db=db,
@@ -279,29 +327,79 @@ async def _run_support_pipeline(
     )
     response_ms = (time.monotonic() - t0) * 1000
 
-    # Store AI reply
+    # ------------------------------------------------------------------
+    # 4. Store AI reply with full AI signals
+    # ------------------------------------------------------------------
+
+    ai_msg_metadata: dict[str, Any] = {
+        "channel": channel,
+        "should_escalate": ai_result.should_escalate,
+        "escalation_reason": ai_result.escalation_reason,
+    }
+
     await msg_repo.create_message(
         conversation_id=active_conv.id,
         sender_type="ai",
         content=ai_result.response,
         intent=ai_result.intent,
         ai_confidence=ai_result.confidence,
-        metadata=(
-            {
-                "should_escalate": ai_result.should_escalate,
-                "escalation_reason": ai_result.escalation_reason,
-                "channel": channel,
-            }
-            if ai_result.should_escalate
-            else {"channel": channel}
-        ),
+        sentiment=getattr(ai_result, "sentiment", None),
+        urgency=getattr(ai_result, "urgency", None),
+        escalate=ai_result.should_escalate,
+        metadata=ai_msg_metadata,
     )
 
-    # Update conversation if escalated
+    # Log: AI response generated
+    await event_logger.log(
+        db,
+        event_logger.AI_RESPONSE_GENERATED,
+        user_id=user.id,
+        conversation_id=active_conv.id,
+        channel=channel,
+        intent=ai_result.intent,
+        sentiment=getattr(ai_result, "sentiment", None),
+        urgency=getattr(ai_result, "urgency", None),
+        confidence=ai_result.confidence,
+        details={
+            "escalated": ai_result.should_escalate,
+            "tools_called": ai_result.tools_called,
+        },
+    )
+
+    # ------------------------------------------------------------------
+    # 5. Handle escalation
+    # ------------------------------------------------------------------
+
     if ai_result.should_escalate:
         await conv_repo.update(active_conv.id, {"status": "escalated"})
+        await event_logger.log(
+            db,
+            event_logger.ISSUE_ESCALATED,
+            user_id=user.id,
+            conversation_id=active_conv.id,
+            channel=channel,
+            intent=ai_result.intent,
+            details={
+                "escalation_reason": ai_result.escalation_reason,
+                "escalation_level": getattr(ai_result, "escalation_level", "none"),
+                "escalation_cause": getattr(ai_result, "escalation_cause", None),
+            },
+        )
 
-    # Record metrics (fire-and-forget)
+    if getattr(ai_result, "similar_issue_detected", False):
+        await event_logger.log(
+            db,
+            event_logger.SIMILAR_ISSUE_DETECTED,
+            user_id=user.id,
+            conversation_id=active_conv.id,
+            channel=channel,
+            details={"intent": ai_result.intent},
+        )
+
+    # ------------------------------------------------------------------
+    # 6. Record full agent metrics (fire-and-forget)
+    # ------------------------------------------------------------------
+
     try:
         metrics_repo = AgentMetricsRepository(db)
         await metrics_repo.record({
@@ -310,12 +408,17 @@ async def _run_support_pipeline(
             "channel": channel,
             "intent_detected": ai_result.intent,
             "confidence_score": ai_result.confidence,
+            "sentiment": getattr(ai_result, "sentiment", None),
+            "urgency": getattr(ai_result, "urgency", None),
             "tools_called": ai_result.tools_called,
             "iterations": ai_result.iterations,
             "response_time_ms": response_ms,
             "model_used": settings.OPENAI_MODEL,
             "was_escalated": ai_result.should_escalate,
             "escalation_reason": ai_result.escalation_reason,
+            "escalation_level": getattr(ai_result, "escalation_level", "none"),
+            "escalation_cause": getattr(ai_result, "escalation_cause", None),
+            "similar_issue_detected": getattr(ai_result, "similar_issue_detected", False),
             "ticket_created": ai_result.ticket_created,
             "kb_articles_found": ai_result.kb_articles_found,
         })
@@ -323,11 +426,12 @@ async def _run_support_pipeline(
         logger.warning("Failed to record channel metrics: %s", exc)
 
     logger.info(
-        "AI pipeline complete | channel=%s user=%s conv=%s intent=%s response_ms=%.0f",
+        "AI pipeline complete | channel=%s user=%s conv=%s intent=%s escalated=%s response_ms=%.0f",
         channel,
         user.id,
         active_conv.id,
         ai_result.intent,
+        ai_result.should_escalate,
         response_ms,
     )
 

@@ -71,3 +71,37 @@ class ConversationRepository(BaseRepository[Conversation]):
             .limit(limit)
         )
         return list(result.scalars().all())
+
+    async def get_by_thread_id(self, thread_id: str) -> Optional[Conversation]:
+        """Return the most recent conversation with this thread_id.
+
+        Used by email (Gmail thread ID) and WhatsApp (sender phone) to resume
+        an existing conversation thread rather than creating a new one.
+        """
+        result = await self.db.execute(
+            select(Conversation)
+            .where(Conversation.thread_id == thread_id)
+            .order_by(Conversation.updated_at.desc())
+        )
+        return result.scalars().first()
+
+    async def get_active_by_user_channel(
+        self,
+        user_id: str,
+        channel: str,
+    ) -> Optional[Conversation]:
+        """Return the most recently updated active conversation for a user+channel pair.
+
+        More reliable than a linear scan through get_by_user() when the user
+        has multiple conversations.
+        """
+        result = await self.db.execute(
+            select(Conversation)
+            .where(
+                Conversation.user_id == user_id,
+                Conversation.channel == channel,
+                Conversation.status == "active",
+            )
+            .order_by(Conversation.updated_at.desc())
+        )
+        return result.scalars().first()

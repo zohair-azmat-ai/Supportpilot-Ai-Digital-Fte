@@ -60,8 +60,8 @@ This is not a tutorial project or a hackathon demo. It is a **production-style m
 | 🤖 | **Tool-based AI agent** | **Auditable reasoning loop** — runs a strict 5-tool sequence; every decision is logged and explainable |
 | 📊 | **Dual portal system** | **Role-based access control** — separate customer and admin dashboards secured with JWT |
 | 🔌 | **Event-driven architecture** | **Zero-code bus swap** — InMemoryBus for dev, KafkaEventBus for prod, one env var to switch |
-| 📡 | **Multi-channel design** | **Channel-agnostic pipeline** — adapter pattern normalises Web, Gmail, and WhatsApp into one flow |
-| 📈 | **CRM-grade schema** | **8 relational tables** — users, customers, conversations, messages, tickets, KB, agent_metrics |
+| 📡 | **Multi-channel design** | **Unified customer history** — adapter pattern normalises Web, Gmail, and WhatsApp; same identity cross-channel; email thread continuity via `thread_id` |
+| 📈 | **CRM-grade schema** | **9 relational tables** — users, customers, conversations, messages, tickets, KB, agent_metrics, system_events |
 | ☸️ | **Scale-ready from day one** | **Kubernetes-ready** — Kafka workers and K8s manifests already committed for the next phase |
 
 ---
@@ -238,8 +238,27 @@ Every inbound message — regardless of origin — is normalised into a shared `
 |:--------|:------:|:------------|
 | **Web Chat** | ✅ Live | `POST /api/v1/conversations/{id}/messages` |
 | **Web Support Form** | ✅ Live | `POST /api/v1/support/submit` |
-| **Gmail / Email** | 🔧 Scaffolded | `backend/app/channels/email.py` — add credentials to activate |
-| **WhatsApp** | 🔧 Scaffolded | `backend/app/channels/whatsapp.py` — add Twilio credentials to activate |
+| **Gmail / Email** | 🟡 Activation-ready | `POST /api/v1/channels/email/inbound` — set `GMAIL_ENABLED=true` + credentials |
+| **WhatsApp** | 🟡 Activation-ready | `POST /api/v1/channels/whatsapp/inbound` — set `TWILIO_ENABLED=true` + credentials |
+
+**Unified customer identity across channels:**
+
+- Same email on web and Gmail → one `Customer` record, shared support history
+- Same phone on WhatsApp → linked via `CustomerIdentifier(channel='whatsapp')`
+- AI context builder surfaces cross-channel history to the agent on every request
+- Multi-channel activity detected automatically — agent informed when customer contacts from multiple channels
+
+**Email thread continuity:**
+
+- Gmail `thread_id` stored on the `Conversation` record
+- Replies in the same Gmail thread resume the same conversation in SupportPilot
+- WhatsApp sessions keyed on sender phone — one active conversation per sender
+
+**Safe when credentials are absent:**
+
+- `GMAIL_ENABLED=false` (default) — webhook returns `503`, polling skips silently; app starts normally
+- `TWILIO_ENABLED=false` (default) — webhook returns `503`; no crash, no startup warning
+- Both channels log a clear message when send_response is called without credentials
 
 **Adding a new channel requires only one file:**
 
@@ -249,9 +268,8 @@ class BaseChannelAdapter(ABC):
     async def send_response(self, recipient: str, message: str) -> bool: ...
 
 # SupportService only ever receives InboundMessage — channel-agnostic by design.
+# thread_id and external_id on InboundMessage carry channel-specific metadata cleanly.
 ```
-
-Activating Gmail or WhatsApp requires adding credentials to `.env` and removing the `NotImplementedError` guard. **No changes to services, agents, or repositories.**
 
 ---
 
@@ -478,6 +496,9 @@ All endpoints are prefixed with `/api/v1`. &nbsp; Interactive docs → [`/docs`]
 | `GET` | `/metrics/overview` | 👑 | AI agent performance stats |
 | `GET` | `/metrics/channels` | 👑 | Per-channel breakdown |
 | `GET` | `/metrics/escalations` | 👑 | Escalation records and rates |
+| `GET` | `/metrics/events` | 👑 | Event log analytics (by type, channel, intent) |
+| `POST` | `/channels/email/inbound` | Public | Gmail Pub/Sub webhook (GMAIL_ENABLED) |
+| `POST` | `/channels/whatsapp/inbound` | Public | Twilio WhatsApp webhook (TWILIO_ENABLED) |
 
 > Full request/response schemas → [docs/api-spec.md](docs/api-spec.md)
 
@@ -504,9 +525,10 @@ All endpoints are prefixed with `/api/v1`. &nbsp; Interactive docs → [`/docs`]
 | Phase | What | Status |
 |:-----:|:-----|:------:|
 | **Phase 1 — Digital FTE MVP** | Tool-based AI agent · dual-mode event bus · worker system · CRM schema · K8s manifests | ✅ Done |
-| **Phase 2 — Channels + Streaming** | Activate Gmail/WhatsApp · OpenAI streaming · WebSocket real-time push | 🔜 Next |
-| **Phase 3 — Full Kafka** | `USE_KAFKA=true` · isolated worker process · scale consumers independently | ⏳ On demand |
-| **Phase 4 — Kubernetes** | Apply `k8s/` manifests · HPA on Kafka lag via KEDA · multi-tenant workspaces | 🏢 Enterprise |
+| **Phase 2 — Intelligence + Analytics** | Smart escalation · similar issue detection · event-driven analytics · agent metrics | ✅ Done |
+| **Phase 3 — Multi-channel** | Gmail + WhatsApp adapters · unified customer identity · email thread continuity · channel analytics | ✅ Done |
+| **Phase 4 — Full Kafka + Streaming** | `USE_KAFKA=true` · isolated worker processes · OpenAI token streaming · WebSocket real-time push | 🔜 Next |
+| **Phase 5 — Kubernetes** | Apply `k8s/` manifests · HPA on Kafka lag via KEDA · multi-tenant workspaces | 🏢 Enterprise |
 
 The event bus and worker system are already implemented — switching to Kafka requires one env var. See [docs/specs/scaling-architecture.md](docs/specs/scaling-architecture.md).
 
@@ -514,8 +536,6 @@ The event bus and worker system are already implemented — switching to Kafka r
 
 ## 🔮 Future Features
 
-- [ ] **Gmail channel** — Inbound email parsing, auto-reply in thread, ticket creation
-- [ ] **WhatsApp channel** — Twilio WhatsApp Business API for conversational support
 - [ ] **RAG knowledge base** — Company docs embedded and retrieved via pgvector / Pinecone
 - [ ] **WebSocket streaming** — Real-time AI token streaming to the chat UI
 - [ ] **Human handoff UI** — Admin live-chat takeover for escalated conversations

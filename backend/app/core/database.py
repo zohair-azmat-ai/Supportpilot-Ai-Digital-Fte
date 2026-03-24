@@ -365,6 +365,22 @@ _PATCHES = [
     ALTER TABLE agent_metrics
         ADD COLUMN IF NOT EXISTS similar_issue_detected BOOLEAN DEFAULT false
     """,
+
+    # =========================================================================
+    # conversations — channel-specific threading / session key
+    # =========================================================================
+
+    # thread_id: Gmail thread ID for email (resumes same thread across replies);
+    #            sender phone for WhatsApp (session continuity per sender).
+    #            NULL for web (each conversation is independent).
+    """
+    ALTER TABLE conversations
+        ADD COLUMN IF NOT EXISTS thread_id VARCHAR(500)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_conversations_thread_id
+        ON conversations (thread_id)
+    """,
 ]
 
 

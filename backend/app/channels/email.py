@@ -236,6 +236,8 @@ class EmailChannelAdapter(BaseChannelAdapter):
             body=body or "(no body)",
             channel=self.channel_name,
             priority_hint=_infer_priority(subject),
+            thread_id=thread_id,
+            external_id=message_id,
             raw_payload={**raw_payload, "thread_id": thread_id, "message_id": message_id},
         )
 
@@ -307,6 +309,8 @@ class EmailChannelAdapter(BaseChannelAdapter):
                 body=body or "(no body)",
                 channel=self.channel_name,
                 priority_hint=_infer_priority(subject),
+                thread_id=thread_id,
+                external_id=message_id,
                 raw_payload={"thread_id": thread_id, "message_id": message_id},
             )
         except Exception as exc:

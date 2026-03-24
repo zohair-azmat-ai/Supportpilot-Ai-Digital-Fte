@@ -326,6 +326,20 @@ class ConversationContextBuilder:
                         f"status={c.status}{subject}"
                     )
 
+            # --- Multi-channel detection ---
+            if conversations:
+                channels_seen = {
+                    getattr(c, "channel", None)
+                    for c in conversations
+                    if getattr(c, "channel", None)
+                }
+                if len(channels_seen) > 1:
+                    lines.insert(
+                        0,
+                        f"  ⟳ Multi-channel customer: prior contact via "
+                        f"{', '.join(sorted(channels_seen))}. Use unified history carefully.",
+                    )
+
             if lines:
                 ctx.user_history_summary = "\n".join(lines)
 
