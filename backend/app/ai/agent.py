@@ -88,81 +88,167 @@ Always be helpful, accurate, and professional. Follow the tool order without dev
 
 
 # ---------------------------------------------------------------------------
-# Escalation trigger detection — pre-flight keyword + memory check
+# Pre-flight intent classification + response selection
 # ---------------------------------------------------------------------------
 
-# Keywords that indicate the user's issue is unresolved or recurring
-_ESCALATION_TRIGGER_KEYWORDS = frozenset({
-    "still", "again", "not working", "issue not solved", "still not",
-    "still having", "not fixed", "same problem", "same issue",
-    "unresolved", "keeps happening", "happening again", "nothing works",
-    "didn't help", "didn't fix", "did not help", "did not fix",
-    "no solution", "still broken", "still failing",
+# --- Keyword sets ---
+
+_ACCOUNT_KEYWORDS = frozenset({
+    "password", "reset", "login", "log in", "sign in", "signin",
+    "credential", "credentials", "locked out", "account", "access denied",
+    "can't login", "cannot login", "forgot password",
 })
 
-# Words too common to count as a "shared topic" signal
+_REPEATED_ISSUE_KEYWORDS = frozenset({
+    "already", "still", "tried", "again", "same", "still not",
+    "not working", "issue not solved", "not fixed", "same problem",
+    "same issue", "unresolved", "keeps happening", "nothing works",
+    "didn't help", "didn't fix", "did not help", "did not fix",
+    "no solution", "still broken", "still failing", "happening again",
+})
+
+# Common words excluded from topic-overlap memory check
 _STOP_WORDS = frozenset({
     "i", "my", "me", "the", "a", "an", "is", "it", "to", "have", "has",
     "am", "are", "was", "be", "of", "in", "for", "and", "or", "but",
     "that", "this", "with", "on", "at", "can", "you", "your", "we",
+    "not", "no", "do", "don", "get", "got", "help", "please", "hi",
 })
 
-_ESCALATION_RESPONSE_TEXT = (
-    "I understand the issue is still not resolved. "
-    "I'm escalating this to a human support agent who will assist you further shortly."
-)
+# --- Response variant pools (3 variants each, never repeat the last reply) ---
+
+_ACCOUNT_TROUBLESHOOT_VARIANTS = [
+    (
+        "I can help you get back into your account. Here are the steps to try:\n\n"
+        "1. Click **Forgot Password** on the login page\n"
+        "2. Enter your registered email address and submit\n"
+        "3. Check your inbox — and your spam/junk folder — for a reset link\n"
+        "4. If the email doesn't arrive within 5 minutes, make sure you're using "
+        "the email address you signed up with\n\n"
+        "Let me know if any of these work, or if the problem continues."
+    ),
+    (
+        "Happy to help you sort out your login. Please try the following:\n\n"
+        "• Go to the sign-in page and select **Reset Password**\n"
+        "• Enter your email — a reset link will arrive within a few minutes\n"
+        "• Check both inbox and spam; sometimes these emails get filtered\n"
+        "• Try a different browser or clear your cache if the link doesn't work\n\n"
+        "Still stuck after trying these? Just let me know and I'll escalate this right away."
+    ),
+    (
+        "Let's get your account access sorted. A few things to check:\n\n"
+        "1. Use the **Forgot Password** option on the login screen\n"
+        "2. Confirm you're entering the email you originally registered with\n"
+        "3. Check spam/junk for the password reset email\n"
+        "4. Try opening the reset link in an incognito/private window\n\n"
+        "If none of these resolve it, reply here and I'll connect you with an agent."
+    ),
+]
+
+_ACCOUNT_ESCALATION_VARIANTS = [
+    (
+        "I understand you've already tried resolving this issue. "
+        "Since it's still happening, I'm escalating this to a human support agent "
+        "who will assist you further."
+    ),
+    (
+        "I can see you've been working on this for a while — I'm sorry it hasn't been "
+        "resolved yet. I'm connecting you with a human support agent now who will "
+        "personally take this forward."
+    ),
+    (
+        "Since the issue is persisting despite your attempts, I'm escalating this "
+        "immediately. A human support agent will reach out to you shortly."
+    ),
+]
+
+_GENERAL_ESCALATION_VARIANTS = [
+    (
+        "I understand the issue is still not resolved. "
+        "I'm escalating this to a human support agent who will assist you further shortly."
+    ),
+    (
+        "I'm sorry to hear this is still happening — I'm connecting you with a human "
+        "support agent right now. They will be with you shortly."
+    ),
+    (
+        "Since this is an ongoing issue, I'm passing this to a human support agent "
+        "who can give it the full attention it deserves."
+    ),
+]
 
 
-def _detect_escalation_triggers(
+# --- Helpers ---
+
+def _get_last_ai_response(conversation_history: list[dict]) -> str:
+    """Return the content of the most recent AI message in history, or empty string."""
+    for m in reversed(conversation_history):
+        if m.get("sender_type") in ("ai", "agent") and m.get("content"):
+            return m["content"].strip()
+    return ""
+
+
+def _pick_variant(variants: list[str], conversation_history: list[dict]) -> str:
+    """Choose a response variant, preferring one different from the last AI reply.
+
+    Cycles deterministically through available options so the customer
+    never sees the exact same text twice in a row.
+    """
+    last_ai = _get_last_ai_response(conversation_history)
+    candidates = [v for v in variants if v.strip() != last_ai]
+    pool = candidates if candidates else variants
+    return pool[len(conversation_history) % len(pool)]
+
+
+# --- Main classification function ---
+
+def _classify_message_signals(
     user_message: str,
     conversation_history: list[dict],
-) -> tuple[bool, str]:
-    """Return (should_escalate, reason) based on keyword and memory checks.
+) -> dict:
+    """Classify the message and conversation into intent + repeated_issue signals.
 
-    Two independent signals can trigger early escalation:
+    Checks two dimensions:
 
-    1. **Keyword match** — the current message contains a frustration/
-       repeat-issue phrase (e.g. "still not working", "same issue again").
+    * **intent** — ``"account_issue"`` if login/password/credential keywords are
+      present; ``"general"`` otherwise.
 
-    2. **Repeated-issue memory** — the current message shares ≥2 meaningful
-       words with at least 2 of the last 6 prior user messages, indicating
-       the customer has raised the same topic multiple times without resolution.
+    * **repeated_issue** — ``True`` when:
+      - The message contains an explicit frustration/retry phrase (e.g. "already
+        tried", "still not working", "same issue"), OR
+      - The topic has appeared in ≥2 of the last 6 user turns (memory signal).
 
-    Args:
-        user_message: The latest message from the customer.
-        conversation_history: Prior messages as ``{sender_type, content}`` dicts.
-
-    Returns:
-        Tuple of ``(True, reason_str)`` if escalation is warranted,
-        otherwise ``(False, "")``.
+    Returns a dict with keys ``intent`` (str) and ``repeated_issue`` (bool).
+    Safe when ``user_message`` is empty or ``conversation_history`` is empty.
     """
     msg = user_message.lower().strip()
     if not msg:
-        return False, ""
+        return {"intent": "general", "repeated_issue": False}
 
-    # --- Signal 1: direct keyword match ---
-    if any(kw in msg for kw in _ESCALATION_TRIGGER_KEYWORDS):
-        return True, "Frustration or unresolved-issue keyword detected in message"
+    intent = "account_issue" if any(k in msg for k in _ACCOUNT_KEYWORDS) else "general"
 
-    # --- Signal 2: repeated topic across conversation history ---
-    prior_user_msgs = [
-        m.get("content", "").lower()
-        for m in conversation_history
-        if m.get("sender_type") == "user" and m.get("content")
-    ]
+    # Signal A: explicit repeated-issue keyword
+    repeated = any(kw in msg for kw in _REPEATED_ISSUE_KEYWORDS)
 
-    if len(prior_user_msgs) >= 2:
-        current_words = set(msg.split()) - _STOP_WORDS
-        if len(current_words) >= 2:
-            overlap_count = sum(
-                1
-                for prev in prior_user_msgs[-6:]  # scan last 6 user turns
-                if len((set(prev.split()) - _STOP_WORDS) & current_words) >= 2
-            )
-            if overlap_count >= 2:
-                return True, "Same issue raised multiple times — repeating topic detected in conversation history"
+    # Signal B: topic repetition across history (memory check)
+    if not repeated:
+        prior_user_msgs = [
+            m.get("content", "").lower()
+            for m in conversation_history
+            if m.get("sender_type") == "user" and m.get("content")
+        ]
+        if len(prior_user_msgs) >= 2:
+            current_words = set(msg.split()) - _STOP_WORDS
+            if len(current_words) >= 2:
+                overlap_count = sum(
+                    1
+                    for prev in prior_user_msgs[-6:]
+                    if len((set(prev.split()) - _STOP_WORDS) & current_words) >= 2
+                )
+                if overlap_count >= 2:
+                    repeated = True
 
-    return False, ""
+    return {"intent": intent, "repeated_issue": repeated}
 
 
 # ---------------------------------------------------------------------------
@@ -201,24 +287,45 @@ class SupportAgent:
             Gracefully falls back to a context-aware response on any error.
         """
         # ------------------------------------------------------------------
-        # Pre-flight escalation check — runs before any OpenAI call.
-        # Catches unresolved/repeated issues immediately without an API round-trip.
+        # Pre-flight classification — runs before any OpenAI call.
+        # Handles clear-cut cases immediately; ambiguous ones go to OpenAI.
         # ------------------------------------------------------------------
-        should_escalate_early, escalation_reason = _detect_escalation_triggers(
-            user_message, conversation_history
-        )
-        if should_escalate_early:
-            logger.info(
-                "Pre-flight escalation triggered | conversation=%s reason=%s",
-                conversation_id,
-                escalation_reason,
-            )
+        signals = _classify_message_signals(user_message, conversation_history)
+        intent = signals["intent"]
+        repeated = signals["repeated_issue"]
+
+        if intent == "account_issue" and repeated:
+            # Account issue + user has already tried → escalate with empathy
+            reason = "Account issue persisting after user's own troubleshooting attempts"
+            logger.info("Pre-flight: account+repeated | conversation=%s", conversation_id)
             return AIResponse(
-                response=_ESCALATION_RESPONSE_TEXT,
+                response=_pick_variant(_ACCOUNT_ESCALATION_VARIANTS, conversation_history),
+                intent="account",
+                confidence=0.9,
+                should_escalate=True,
+                escalation_reason=reason,
+            )
+
+        if repeated:
+            # Any other repeated/unresolved issue → general escalation
+            reason = "Repeated or unresolved issue detected"
+            logger.info("Pre-flight: repeated issue | conversation=%s", conversation_id)
+            return AIResponse(
+                response=_pick_variant(_GENERAL_ESCALATION_VARIANTS, conversation_history),
                 intent="complaint",
                 confidence=0.9,
                 should_escalate=True,
-                escalation_reason=escalation_reason,
+                escalation_reason=reason,
+            )
+
+        if intent == "account_issue":
+            # First-time account/login issue → give troubleshooting steps
+            logger.info("Pre-flight: account first-time | conversation=%s", conversation_id)
+            return AIResponse(
+                response=_pick_variant(_ACCOUNT_TROUBLESHOOT_VARIANTS, conversation_history),
+                intent="account",
+                confidence=0.85,
+                should_escalate=False,
             )
 
         ctx = AgentContext(db=db, user_id=user_id, conversation_id=conversation_id)
