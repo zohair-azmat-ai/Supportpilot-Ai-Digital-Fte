@@ -28,45 +28,41 @@ export default function ChatDetailPage() {
     setStreamingContent(null)
     pendingUserMsg.current = null
 
+    console.log('[stream] starting for conversation', id)
+
     try {
       await messagesApi.stream(id, content, {
         onUserMessage: (userMsg) => {
+          console.log('[stream] user_message received', userMsg.id)
           pendingUserMsg.current = userMsg
           addUserMessage(userMsg)
         },
         onToken: (token) => {
           // First token: switch from typing dots to live streaming text
           setAiLoading(false)
-          setStreamingContent((prev) => (prev ?? '') + token)
+          setStreamingContent((prev) => {
+            if (prev === null) console.log('[stream] first token received')
+            return (prev ?? '') + token
+          })
         },
         onDone: (aiMsg) => {
+          console.log('[stream] done — ai_message id:', aiMsg.id, 'intent:', aiMsg.intent)
           setStreamingContent(null)
           setAiLoading(false)
           addAiMessage(aiMsg)
         },
         onError: (errMsg) => {
+          console.error('[stream] error event:', errMsg)
           setStreamingContent(null)
           setAiLoading(false)
           toast.error(errMsg)
         },
       })
-    } catch {
-      // Streaming failed — fall back to standard request
+    } catch (err) {
+      console.error('[stream] fetch-level error:', err)
       setStreamingContent(null)
-      setAiLoading(true)
-      try {
-        const { user_message, ai_message } = await messagesApi.send(id, content)
-        addMessages(user_message, ai_message)
-      } catch (fallbackErr: unknown) {
-        const msg =
-          fallbackErr && typeof fallbackErr === 'object' && 'response' in fallbackErr
-            ? (fallbackErr as { response?: { data?: { detail?: string } } }).response?.data?.detail ||
-              'Failed to send message'
-            : 'Failed to send message. Please try again.'
-        toast.error(msg)
-      } finally {
-        setAiLoading(false)
-      }
+      setAiLoading(false)
+      toast.error('Streaming failed. Please try again.')
     }
   }
 
@@ -190,7 +186,7 @@ export default function ChatDetailPage() {
 
       <ChatInput
         onSend={handleSend}
-        disabled={aiLoading || conversation.status === 'closed'}
+        disabled={aiLoading || streamingContent !== null || conversation.status === 'closed'}
         placeholder={conversation.status === 'closed' ? 'This conversation is closed' : 'Type your message...'}
       />
     </div>

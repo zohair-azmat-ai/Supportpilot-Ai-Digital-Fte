@@ -115,9 +115,11 @@ export const messagesApi = {
     const { onUserMessage, onToken, onDone, onError } = callbacks
     const token = typeof window !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null
     const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'
+    const url = `${baseUrl}/conversations/${conversationId}/messages/stream`
+    console.log('[stream] fetch →', url, 'auth:', !!token)
 
     const response = await fetch(
-      `${baseUrl}/conversations/${conversationId}/messages/stream`,
+      url,
       {
         method: 'POST',
         headers: {
@@ -128,6 +130,7 @@ export const messagesApi = {
       }
     )
 
+    console.log('[stream] response status:', response.status)
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`)
     }
