@@ -318,16 +318,23 @@ class ToolExecutor:
         from app.repositories.ticket import TicketRepository
 
         ticket_repo = TicketRepository(ctx.db)
-        ticket = await ticket_repo.create(
-            {
-                "user_id": ctx.user_id,
-                "conversation_id": ctx.conversation_id,
-                "title": args["title"],
-                "description": args["description"],
-                "category": args["category"],
-                "priority": args["priority"],
-            }
-        )
+
+        # Enrich ticket with AI signals from the decision engine when available
+        ticket_data: dict = {
+            "user_id": ctx.user_id,
+            "conversation_id": ctx.conversation_id,
+            "title": args["title"],
+            "description": args["description"],
+            "category": args["category"],
+            "priority": args["priority"],
+        }
+        if ctx.predecided is not None:
+            ticket_data["sentiment"] = ctx.predecided.sentiment
+            ticket_data["urgency"] = ctx.predecided.urgency
+            if ctx.predecided.escalate and ctx.predecided.escalation_reason:
+                ticket_data["escalation_reason"] = ctx.predecided.escalation_reason
+
+        ticket = await ticket_repo.create(ticket_data)
 
         ctx.ticket_id = ticket.id
         ctx.ticket_created = True

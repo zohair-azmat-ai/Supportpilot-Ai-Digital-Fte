@@ -305,6 +305,50 @@ _PATCHES = [
     ALTER TABLE tickets
         ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()
     """,
+
+    # AI-signal fields on tickets — nullable so existing rows are unaffected
+    """
+    ALTER TABLE tickets
+        ADD COLUMN IF NOT EXISTS sentiment VARCHAR(50)
+    """,
+    """
+    ALTER TABLE tickets
+        ADD COLUMN IF NOT EXISTS urgency VARCHAR(50)
+    """,
+    """
+    ALTER TABLE tickets
+        ADD COLUMN IF NOT EXISTS escalation_reason TEXT
+    """,
+
+    # =========================================================================
+    # messages — AI signal fields
+    # =========================================================================
+
+    """
+    ALTER TABLE messages
+        ADD COLUMN IF NOT EXISTS sentiment VARCHAR(50)
+    """,
+    """
+    ALTER TABLE messages
+        ADD COLUMN IF NOT EXISTS urgency VARCHAR(50)
+    """,
+    """
+    ALTER TABLE messages
+        ADD COLUMN IF NOT EXISTS escalate BOOLEAN DEFAULT false
+    """,
+
+    # =========================================================================
+    # agent_metrics — sentiment and urgency for analytics queries
+    # =========================================================================
+
+    """
+    ALTER TABLE agent_metrics
+        ADD COLUMN IF NOT EXISTS sentiment VARCHAR(50)
+    """,
+    """
+    ALTER TABLE agent_metrics
+        ADD COLUMN IF NOT EXISTS urgency VARCHAR(50)
+    """,
 ]
 
 

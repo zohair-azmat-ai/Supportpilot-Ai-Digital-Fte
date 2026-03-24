@@ -47,6 +47,9 @@ class Ticket(Base):
         nullable=False,
         default="open",
     )
+    sentiment: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    urgency: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    escalation_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     assigned_to: Mapped[Optional[str]] = mapped_column(
         String(36),
         ForeignKey("users.id", ondelete="SET NULL"),

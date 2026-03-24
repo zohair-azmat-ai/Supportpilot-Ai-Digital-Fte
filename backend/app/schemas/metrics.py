@@ -12,6 +12,16 @@ class IntentCount(BaseModel):
     count: int
 
 
+class SentimentCount(BaseModel):
+    sentiment: str
+    count: int
+
+
+class UrgencyCount(BaseModel):
+    urgency: str
+    count: int
+
+
 class MetricsOverviewResponse(BaseModel):
     """Aggregate platform-wide AI performance metrics."""
     total_interactions: int
@@ -23,6 +33,8 @@ class MetricsOverviewResponse(BaseModel):
     avg_tools_per_run: float
     avg_iterations: float
     top_intents: List[IntentCount]
+    sentiment_breakdown: List[SentimentCount] = []
+    urgency_distribution: List[UrgencyCount] = []
 
 
 class ChannelMetric(BaseModel):

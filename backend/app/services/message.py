@@ -87,21 +87,16 @@ class MessageService:
         )
         response_ms = (time.monotonic() - t0) * 1000
 
-        # 4. Persist AI response
+        # 4. Persist AI response with full AI signals
         ai_message = await msg_repo.create_message(
             conversation_id=conversation_id,
             sender_type="ai",
             content=ai_result.response,
             intent=ai_result.intent,
             ai_confidence=ai_result.confidence,
-            metadata=(
-                {
-                    "should_escalate": ai_result.should_escalate,
-                    "escalation_reason": ai_result.escalation_reason,
-                }
-                if ai_result.should_escalate
-                else None
-            ),
+            sentiment=getattr(ai_result, "sentiment", None),
+            urgency=getattr(ai_result, "urgency", None),
+            escalate=ai_result.should_escalate,
         )
 
         # 5. Escalate conversation if the agent flagged it
@@ -141,6 +136,8 @@ class MessageService:
             "channel": getattr(conversation, "channel", "web"),
             "intent_detected": ai_result.intent,  # type: ignore[attr-defined]
             "confidence_score": ai_result.confidence,  # type: ignore[attr-defined]
+            "sentiment": getattr(ai_result, "sentiment", None),
+            "urgency": getattr(ai_result, "urgency", None),
             "tools_called": getattr(ai_result, "tools_called", []),
             "iterations": getattr(ai_result, "iterations", 0),
             "response_time_ms": response_ms,

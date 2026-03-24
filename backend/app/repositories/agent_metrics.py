@@ -95,6 +95,36 @@ class AgentMetricsRepository(BaseRepository[AgentMetrics]):
             for r in intents_result
         ]
 
+        # --- Sentiment breakdown ---
+        sentiment_result = await self.db.execute(
+            select(
+                AgentMetrics.sentiment,
+                func.count(AgentMetrics.id).label("cnt"),
+            )
+            .where(AgentMetrics.sentiment.isnot(None))
+            .group_by(AgentMetrics.sentiment)
+            .order_by(func.count(AgentMetrics.id).desc())
+        )
+        sentiment_breakdown = [
+            {"sentiment": r.sentiment, "count": r.cnt}
+            for r in sentiment_result
+        ]
+
+        # --- Urgency distribution ---
+        urgency_result = await self.db.execute(
+            select(
+                AgentMetrics.urgency,
+                func.count(AgentMetrics.id).label("cnt"),
+            )
+            .where(AgentMetrics.urgency.isnot(None))
+            .group_by(AgentMetrics.urgency)
+            .order_by(func.count(AgentMetrics.id).desc())
+        )
+        urgency_distribution = [
+            {"urgency": r.urgency, "count": r.cnt}
+            for r in urgency_result
+        ]
+
         return {
             "total_interactions": total,
             "avg_confidence": round(float(row["avg_confidence"] or 0.0), 4),
@@ -105,6 +135,8 @@ class AgentMetricsRepository(BaseRepository[AgentMetrics]):
             "avg_tools_per_run": round(avg_tools, 2),
             "avg_iterations": round(float(row["avg_iterations"] or 0.0), 2),
             "top_intents": top_intents,
+            "sentiment_breakdown": sentiment_breakdown,
+            "urgency_distribution": urgency_distribution,
         }
 
     # ------------------------------------------------------------------

@@ -42,6 +42,8 @@ class AgentMetrics(Base):
     channel: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
     intent_detected: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     confidence_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    sentiment: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    urgency: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     tools_called: Mapped[Optional[list]] = mapped_column(
         JSON,
         nullable=True,

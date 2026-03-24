@@ -31,6 +31,9 @@ class MessageRepository(BaseRepository[Message]):
         content: str,
         intent: Optional[str] = None,
         ai_confidence: Optional[float] = None,
+        sentiment: Optional[str] = None,
+        urgency: Optional[str] = None,
+        escalate: Optional[bool] = None,
         metadata: Optional[dict] = None,
     ) -> Message:
         """Create and persist a new message.
@@ -41,6 +44,9 @@ class MessageRepository(BaseRepository[Message]):
             content: Message text content.
             intent: Detected intent label (AI messages only).
             ai_confidence: Confidence score 0-1 (AI messages only).
+            sentiment: Customer sentiment (AI messages only).
+            urgency: Issue urgency level (AI messages only).
+            escalate: Whether this message triggered escalation.
             metadata: Optional extra JSON payload.
 
         Returns:
@@ -53,6 +59,9 @@ class MessageRepository(BaseRepository[Message]):
                 "content": content,
                 "intent": intent,
                 "ai_confidence": ai_confidence,
+                "sentiment": sentiment,
+                "urgency": urgency,
+                "escalate": escalate,
                 "metadata_": metadata,
             }
         )

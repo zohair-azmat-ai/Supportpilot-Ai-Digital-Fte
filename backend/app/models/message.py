@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from sqlalchemy import DateTime, Enum, Float, ForeignKey, JSON, String, Text
+from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -35,6 +35,9 @@ class Message(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     intent: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     ai_confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    sentiment: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    urgency: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    escalate: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     metadata_: Mapped[Optional[Dict[str, Any]]] = mapped_column(
         "metadata", JSON, nullable=True
     )

@@ -23,6 +23,9 @@ class MessageResponse(BaseModel):
     content: str
     intent: Optional[str] = None
     ai_confidence: Optional[float] = None
+    sentiment: Optional[str] = None
+    urgency: Optional[str] = None
+    escalate: Optional[bool] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

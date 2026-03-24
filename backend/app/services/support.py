@@ -104,21 +104,16 @@ class SupportService:
         )
         response_ms = (time.monotonic() - t0) * 1000
 
-        # 5. Persist AI reply
+        # 5. Persist AI reply with full AI signals
         await msg_repo.create_message(
             conversation_id=conversation.id,
             sender_type="ai",
             content=ai_result.response,
             intent=ai_result.intent,
             ai_confidence=ai_result.confidence,
-            metadata=(
-                {
-                    "should_escalate": ai_result.should_escalate,
-                    "escalation_reason": ai_result.escalation_reason,
-                }
-                if ai_result.should_escalate
-                else None
-            ),
+            sentiment=getattr(ai_result, "sentiment", None),
+            urgency=getattr(ai_result, "urgency", None),
+            escalate=ai_result.should_escalate,
         )
 
         if ai_result.should_escalate:
@@ -133,14 +128,19 @@ class SupportService:
         if conv_tickets:
             ticket = conv_tickets[0]
         else:
-            ticket = await ticket_repo.create({
+            fallback_ticket_data: dict = {
                 "user_id": user.id,
                 "conversation_id": conversation.id,
                 "title": data.subject,
                 "description": data.message,
-                "category": data.category,
-                "priority": data.priority,
-            })
+                "category": getattr(ai_result, "category", data.category),
+                "priority": getattr(ai_result, "priority", data.priority),
+                "sentiment": getattr(ai_result, "sentiment", None),
+                "urgency": getattr(ai_result, "urgency", None),
+            }
+            if ai_result.should_escalate and ai_result.escalation_reason:
+                fallback_ticket_data["escalation_reason"] = ai_result.escalation_reason
+            ticket = await ticket_repo.create(fallback_ticket_data)
 
         # 7. Record metrics (non-blocking)
         try:
@@ -152,6 +152,8 @@ class SupportService:
                 "channel": "web",
                 "intent_detected": ai_result.intent,
                 "confidence_score": ai_result.confidence,
+                "sentiment": getattr(ai_result, "sentiment", None),
+                "urgency": getattr(ai_result, "urgency", None),
                 "tools_called": ai_result.tools_called,
                 "iterations": ai_result.iterations,
                 "response_time_ms": response_ms,

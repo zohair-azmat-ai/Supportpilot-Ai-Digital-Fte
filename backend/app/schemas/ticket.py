@@ -59,6 +59,9 @@ class TicketResponse(BaseModel):
     category: str
     priority: str
     status: str
+    sentiment: Optional[str] = None
+    urgency: Optional[str] = None
+    escalation_reason: Optional[str] = None
     assigned_to: Optional[str] = None
     created_at: datetime
     updated_at: datetime
