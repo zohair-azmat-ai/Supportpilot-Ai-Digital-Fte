@@ -1,10 +1,40 @@
 'use client'
 
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { Menu, Bell, LogOut } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { getInitials } from '../../lib/utils'
 import { User } from '../../types'
+
+type BuildStatus = 'live' | 'building' | 'offline'
+
+function useBuildStatus(): BuildStatus {
+  const [status, setStatus] = useState<BuildStatus>('building')
+
+  useEffect(() => {
+    const check = async () => {
+      try {
+        const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'
+        const res = await fetch(`${base}/health/build-status`, { cache: 'no-store' })
+        setStatus(res.ok ? 'live' : 'offline')
+      } catch {
+        setStatus('building')
+      }
+    }
+
+    check()
+    const id = setInterval(check, 10_000)
+    return () => clearInterval(id)
+  }, [])
+
+  return status
+}
+
+const STATUS_CONFIG: Record<BuildStatus, { dot: string; label: string }> = {
+  live:     { dot: 'bg-emerald-400', label: 'Live' },
+  building: { dot: 'bg-yellow-400 animate-pulse', label: 'Rebuilding...' },
+  offline:  { dot: 'bg-red-500', label: 'Offline' },
+}
 
 interface HeaderProps {
   title?: string
@@ -15,6 +45,9 @@ interface HeaderProps {
 }
 
 export function Header({ title, user, onMenuClick, onLogout, isAdmin = false }: HeaderProps) {
+  const buildStatus = useBuildStatus()
+  const { dot, label } = STATUS_CONFIG[buildStatus]
+
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background/80 backdrop-blur-md px-4 lg:px-6">
       {/* Left: menu + title */}
@@ -29,6 +62,12 @@ export function Header({ title, user, onMenuClick, onLogout, isAdmin = false }: 
         {title && (
           <h1 className="text-base font-semibold text-slate-100 hidden sm:block">{title}</h1>
         )}
+      </div>
+
+      {/* Centre: system status badge */}
+      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-background-surface border border-border text-xs text-slate-400">
+        <span className={cn('h-2 w-2 rounded-full shrink-0', dot)} />
+        <span>System Status: {label}</span>
       </div>
 
       {/* Right: notifications + user */}
