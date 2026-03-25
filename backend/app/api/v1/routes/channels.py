@@ -42,6 +42,43 @@ async def whatsapp_inbound(
     x_twilio_signature: str = Header(default="", alias="X-Twilio-Signature"),
 ) -> Response:
     """Receive and process an inbound WhatsApp message from Twilio."""
+    # ------------------------------------------------------------------ #
+    # DEBUG MODE — temporary patch to verify Twilio reaches this endpoint #
+    # ------------------------------------------------------------------ #
+    logger.info("=== WHATSAPP INBOUND HIT ===")
+    logger.info("DEBUG | method=%s url=%s", request.method, str(request.url))
+    logger.info("DEBUG | headers=%s", dict(request.headers))
+
+    try:
+        form_data = await request.form()
+        payload: dict[str, Any] = dict(form_data)
+    except Exception as exc:
+        logger.error("DEBUG | failed to parse form body: %s", exc)
+        payload = {}
+
+    logger.info("DEBUG | raw form fields=%s", payload)
+    logger.info(
+        "DEBUG | Body=%r From=%r To=%r MessageSid=%r",
+        payload.get("Body"),
+        payload.get("From"),
+        payload.get("To"),
+        payload.get("MessageSid"),
+    )
+
+    # Twilio signature validation DISABLED for debug test
+    # (re-enable by removing this early return block)
+    debug_twiml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        "<Response>"
+        "<Message>Debug reply from SupportPilot AI</Message>"
+        "</Response>"
+    )
+    logger.info("DEBUG | returning immediate debug reply, skipping AI pipeline")
+    return Response(content=debug_twiml, media_type="application/xml", status_code=200)
+    # ------------------------------------------------------------------ #
+    # END DEBUG MODE                                                       #
+    # ------------------------------------------------------------------ #
+
     if not settings.twilio_configured:
         logger.info("WhatsApp webhook called while Twilio credentials are not configured")
         raise HTTPException(
@@ -51,9 +88,6 @@ async def whatsapp_inbound(
                 "Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_WHATSAPP_FROM."
             ),
         )
-
-    form_data = await request.form()
-    payload: dict[str, Any] = dict(form_data)
 
     if settings.ENVIRONMENT == "production":
         url = str(request.url)
