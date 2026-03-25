@@ -13,7 +13,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.channels.email import email_adapter
@@ -28,6 +28,18 @@ from app.services.event_logger import event_logger
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/channels", tags=["Channels"])
+
+
+@router.get(
+    "/whatsapp/inbound",
+    summary="WhatsApp inbound route reachability check (debug only)",
+    status_code=200,
+)
+async def whatsapp_inbound_get(request: Request) -> JSONResponse:
+    """DEBUG ONLY — GET probe to confirm the route is reachable."""
+    logger.info("=== WHATSAPP DEBUG GET HIT ===")
+    logger.info("DEBUG GET | url=%s headers=%s", str(request.url), dict(request.headers))
+    return JSONResponse({"ok": True, "message": "WhatsApp inbound route reachable"})
 
 
 @router.post(
@@ -45,7 +57,7 @@ async def whatsapp_inbound(
     # ------------------------------------------------------------------ #
     # DEBUG MODE — temporary patch to verify Twilio reaches this endpoint #
     # ------------------------------------------------------------------ #
-    logger.info("=== WHATSAPP INBOUND HIT ===")
+    logger.info("=== WHATSAPP INBOUND POST HIT ===")
     logger.info("DEBUG | method=%s url=%s", request.method, str(request.url))
     logger.info("DEBUG | headers=%s", dict(request.headers))
 
