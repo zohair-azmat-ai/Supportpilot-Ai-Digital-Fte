@@ -16,6 +16,15 @@
 [![Status: Live](https://img.shields.io/badge/Status-Live-22c55e?style=for-the-badge&logo=vercel&logoColor=white)](https://supportpilot-ai-digital-fte.vercel.app)
 [![License: MIT](https://img.shields.io/badge/License-MIT-f59e0b?style=for-the-badge)](LICENSE)
 
+[![LLM Powered](https://img.shields.io/badge/LLM_Powered-GPT--4o_mini-6d28d9?style=flat-square&logo=openai&logoColor=white)](#-features)
+[![WhatsApp](https://img.shields.io/badge/WhatsApp-Integrated-25D366?style=flat-square&logo=whatsapp&logoColor=white)](#-multi-channel-design)
+[![Email](https://img.shields.io/badge/Email-Integrated-0ea5e9?style=flat-square&logo=gmail&logoColor=white)](#-multi-channel-design)
+[![Multi-Channel](https://img.shields.io/badge/Multi--Channel-Web_%7C_WhatsApp_%7C_Email-f59e0b?style=flat-square)](#-multi-channel-design)
+[![Event Logging](https://img.shields.io/badge/Event_Logging-Enabled-10b981?style=flat-square)](#-features)
+[![Analytics](https://img.shields.io/badge/Analytics-Dashboard-3b82f6?style=flat-square)](#-features)
+[![Escalation Logic](https://img.shields.io/badge/Escalation-Smart_Logic-ef4444?style=flat-square)](#-features)
+[![Production Ready](https://img.shields.io/badge/Architecture-Production_Style-1e293b?style=flat-square)](#-architecture)
+
 <br/>
 
 [🚀 Live Demo](#-live-demo) &nbsp;·&nbsp; [📐 Architecture](#-architecture) &nbsp;·&nbsp; [⚡ Quick Start](#-getting-started) &nbsp;·&nbsp; [📖 API Docs](https://zohairazmat-supportpilot-ai-fte.hf.space/docs) &nbsp;·&nbsp; [🐛 Report Bug](../../issues)
@@ -50,6 +59,24 @@ Admin portal  →  admin@supportpilot.ai  /  Admin123!
 
 ---
 
+## 🆕 Latest Upgrades
+
+> Everything below is **live and shipped** — not planned, not in progress.
+
+| Area | What was built |
+|:-----|:--------------|
+| **Polished SaaS UI** | Production-style frontend with separate customer and admin portals, conversations view, ticket management, and analytics dashboard |
+| **Build Status Indicator** | Live system status badge in the UI header — green/yellow/red, polled every 10 seconds from `/health/build-status` |
+| **WhatsApp Integration** | Full Twilio-based inbound/outbound WhatsApp support — escalation handling, follow-up suppression, duplicate webhook protection, fresh-issue-cycle reset |
+| **Email Integration** | Inbound email pipeline via `POST /email/inbound`; test mode runs the full AI pipeline even when the Gmail provider is disabled; SMTP outbound when configured |
+| **Real LLM Upgrade** | Moved from scripted keyword fallbacks to a structured GPT-4o-mini decision engine — replies are human-like, issue-specific, and context-aware |
+| **AI Categorization** | Every message now produces `category` (billing / technical / account / general), `priority` (low / medium / high / urgent), and `urgency` (low / medium / high) |
+| **Event Logging** | Structured lifecycle events: `response_generated`, `escalation_triggered`, `ticket_created` — all persisted and queryable via the metrics API |
+| **Escalation Loop Fixes** | Calm follow-up suppression (`ok`, `thanks`, `got it`), duplicate escalation prevention, first-message guard, fresh-issue-cycle reset for resumed WhatsApp threads |
+| **Multi-Channel Architecture** | Unified `InboundMessage` adapter pattern across Web, WhatsApp, and Email — same AI pipeline, same ticket/conversation store, same identity resolution |
+
+---
+
 ## ✨ Why This Project Stands Out
 
 This is not a tutorial project or a hackathon demo. It is a **production-style monorepo** built to the standard of a well-engineered SaaS company.
@@ -69,6 +96,7 @@ This is not a tutorial project or a hackathon demo. It is a **production-style m
 ## 📋 Table of Contents
 
 - [🚀 Live Demo](#-live-demo)
+- [🆕 Latest Upgrades](#-latest-upgrades)
 - [✨ Why This Project Stands Out](#-why-this-project-stands-out)
 - [🎯 Features](#-features)
 - [🛠 Tech Stack](#-tech-stack)
@@ -113,14 +141,18 @@ This is not a tutorial project or a hackathon demo. It is a **production-style m
 
 | Feature | Description |
 |:--------|:------------|
+| **LLM Decision Engine** | GPT-4o-mini structured decision engine — every reply is human-like, issue-specific, and context-aware, never generic |
+| **AI Categorization** | Full triage on every message: `category` (billing / technical / account / general) + `priority` (low–urgent) + `urgency` (low–high) |
 | **5-Tool AI Agent** | Strict tool order: `get_history` → `search_KB` → `create_ticket` → `[escalate]` → `send_response` |
-| **Smart Escalation** | Detects billing disputes, legal language, repeated issues, and frustration signals automatically |
-| **Intent Classification** | 7 categories (technical, billing, account, complaint, feature_request, general, urgent) + confidence |
-| **Conversation Memory** | Pre-flight check detects repeated topics across history before calling OpenAI |
-| **Event-Driven Bus** | InMemoryEventBus for dev · KafkaEventBus for prod — zero code change to switch |
-| **Knowledge Base** | Keyword-searchable articles with pgvector-ready `embedding` field for Phase 2 RAG |
-| **Agent Metrics** | Every AI call logged: intent, confidence, tools, response time, escalation status |
-| **Multi-Channel** | Web live · Gmail activation-ready · WhatsApp live via Twilio Sandbox/API |
+| **Smart Escalation** | Frustration-keyword detection, repeat-issue counting, first-message guard, fresh-issue-cycle reset — eliminates false escalation loops |
+| **Calm Follow-up Suppression** | `ok`, `thanks`, `got it` and similar phrases bypass the full pipeline and return a brief polite closure — no repeated escalation |
+| **Event Lifecycle Logging** | Structured events: `response_generated`, `escalation_triggered`, `ticket_created` — all persisted and queryable |
+| **Conversation Memory** | Context builder surfaces repeated-issue signals, failed-attempt counts, and open-ticket state before every LLM call |
+| **KB Pre-fetch** | Relevant knowledge-base articles are injected into the LLM prompt before reply generation — answers reference real help content |
+| **Multi-Channel** | Web ✅ · WhatsApp ✅ (Twilio) · Email ✅ (SMTP / test mode) — same AI pipeline for all three |
+| **Event-Driven Bus** | InMemoryEventBus for dev · KafkaEventBus for prod — one env var to switch |
+| **Agent Metrics** | Every AI call logged: intent, category, priority, urgency, confidence, tools called, response time, escalation status |
+| **Build Status Indicator** | Live UI badge polls `/health/build-status` every 10 s — green (Live) / yellow (Rebuilding) / red (Offline) |
 
 ---
 
@@ -238,7 +270,8 @@ Every inbound message — regardless of origin — is normalised into a shared `
 |:--------|:------:|:------------|
 | **Web Chat** | ✅ Live | `POST /api/v1/conversations/{id}/messages` |
 | **Web Support Form** | ✅ Live | `POST /api/v1/support/submit` |
-| **Gmail / Email** | 🟡 Activation-ready | `POST /api/v1/channels/email/inbound` — set `GMAIL_ENABLED=true` + credentials |
+| **Email** | ✅ Live (test mode + SMTP) | `POST /api/v1/email/inbound` — full AI pipeline; set `SMTP_ENABLED=true` for outbound |
+| **Gmail Pub/Sub** | 🟡 Activation-ready | `POST /api/v1/channels/email/inbound` — set `GMAIL_ENABLED=true` + credentials |
 | **WhatsApp** | ✅ Live via Twilio | `POST /api/v1/channels/whatsapp/inbound` — set Twilio credentials and webhook |
 
 **Unified customer identity across channels:**
@@ -254,10 +287,21 @@ Every inbound message — regardless of origin — is normalised into a shared `
 - Replies in the same Gmail thread resume the same conversation in SupportPilot
 - WhatsApp sessions keyed on sender phone — one active conversation per sender
 
+**Email integration — two modes:**
+
+- `POST /api/v1/email/inbound` — generic JSON endpoint; runs the full AI pipeline and returns the generated reply. Works without any provider configuration — perfect for testing and CI.
+- `POST /api/v1/channels/email/inbound` — Gmail Pub/Sub webhook; requires `GMAIL_ENABLED=true`. When disabled, the webhook acknowledges silently (204) so Pub/Sub never retries.
+- SMTP outbound reply is sent when `SMTP_ENABLED=true` + `SMTP_HOST` are set; otherwise the AI reply is returned in the response body only.
+
+**WhatsApp integration — active improvements:**
+
+- Twilio-based inbound/outbound for WhatsApp Sandbox and production numbers.
+- Escalation loop fixes: calm follow-up suppression, duplicate webhook deduplication via MessageSid, fresh-issue-cycle reset for resumed threads, first-message guard against inherited state.
+
 **Safe when credentials are absent:**
 
-- `GMAIL_ENABLED=false` (default) — webhook returns `503`, polling skips silently; app starts normally
-- Missing Twilio credentials — backend still starts, WhatsApp webhook returns `503`, and outbound sends are logged instead of crashing
+- `GMAIL_ENABLED=false` (default) — Pub/Sub webhook acknowledges with 204 silently; `/email/inbound` still works without credentials
+- Missing Twilio credentials — backend starts normally; WhatsApp outbound sends are logged instead of crashing
 - Partial Twilio config logs a startup warning so local/dev stays safe
 
 **Twilio WhatsApp setup:**
@@ -542,9 +586,10 @@ All endpoints are prefixed with `/api/v1`. &nbsp; Interactive docs → [`/docs`]
 |:-----:|:-----|:------:|
 | **Phase 1 — Digital FTE MVP** | Tool-based AI agent · dual-mode event bus · worker system · CRM schema · K8s manifests | ✅ Done |
 | **Phase 2 — Intelligence + Analytics** | Smart escalation · similar issue detection · event-driven analytics · agent metrics | ✅ Done |
-| **Phase 3 — Multi-channel** | Gmail + WhatsApp adapters · unified customer identity · email thread continuity · channel analytics | ✅ Done |
-| **Phase 4 — Full Kafka + Streaming** | `USE_KAFKA=true` · isolated worker processes · OpenAI token streaming · WebSocket real-time push | 🔜 Next |
-| **Phase 5 — Kubernetes** | Apply `k8s/` manifests · HPA on Kafka lag via KEDA · multi-tenant workspaces | 🏢 Enterprise |
+| **Phase 3 — Multi-channel** | WhatsApp + Email adapters · unified customer identity · email thread continuity · channel analytics | ✅ Done |
+| **Phase 4 — Advanced AI + Observability** | Real LLM decision engine · AI categorization (category/priority/urgency) · event lifecycle logging · escalation loop fixes · build status indicator · email test mode · KB pre-fetch | ✅ Done |
+| **Phase 5 — Memory + Retrieval** | Conversation memory layer · similar-issue retrieval · RAG over knowledge base (pgvector) · deeper context injection | 🔜 Next |
+| **Phase 6 — Orchestration + Scale** | Multi-agent reasoning · full Kafka pipeline · WebSocket streaming · Kubernetes deployment with KEDA autoscaling | 🏢 Roadmap |
 
 The event bus and worker system are already implemented — switching to Kafka requires one env var. See [docs/specs/scaling-architecture.md](docs/specs/scaling-architecture.md).
 
@@ -552,14 +597,16 @@ The event bus and worker system are already implemented — switching to Kafka r
 
 ## 🔮 Future Features
 
-- [ ] **RAG knowledge base** — Company docs embedded and retrieved via pgvector / Pinecone
-- [ ] **WebSocket streaming** — Real-time AI token streaming to the chat UI
-- [ ] **Human handoff UI** — Admin live-chat takeover for escalated conversations
-- [ ] **SLA automation** — Auto-escalation on time and priority thresholds
-- [ ] **Analytics charts** — Resolution time trends, CSAT scores, volume heatmaps
-- [ ] **Fine-tuned model** — Domain-specific fine-tuning on resolved ticket history
-- [ ] **Multi-tenant workspaces** — Workspace isolation for B2B SaaS
-- [ ] **Webhook integrations** — Slack / Teams alerts on ticket events
+- [ ] **Conversation memory layer** — Persist and retrieve per-user issue history across sessions for richer context injection
+- [ ] **Similar-issue retrieval** — Surface semantically related past tickets to the AI before reply generation (pgvector / Pinecone)
+- [ ] **RAG knowledge base** — Company docs embedded and retrieved at query time; plugs directly into the KB pre-fetch pipeline
+- [ ] **Multi-agent orchestration** — Triage agent + specialist agents (billing, technical, account) with a router deciding dispatch
+- [ ] **WebSocket streaming** — Real-time GPT token streaming to the chat UI
+- [ ] **Human handoff UI** — Admin live-chat takeover for escalated conversations with full context hand-off
+- [ ] **Deeper observability** — Resolution time trends, CSAT scores, per-channel volume heatmaps, SLA breach alerts
+- [ ] **SLA automation** — Auto-escalation when tickets breach time or priority thresholds
+- [ ] **Multi-tenant workspaces** — Workspace isolation for B2B SaaS usage
+- [ ] **Fine-tuned model** — Domain-specific fine-tuning on resolved ticket history for lower latency and higher accuracy
 
 ---
 
