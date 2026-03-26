@@ -198,53 +198,73 @@ This is not a tutorial project or a hackathon demo. It is a **production-style m
 
 ```mermaid
 flowchart TD
-    Browser(["🌐 Browser\nNext.js 14 · Vercel"])
+    subgraph FrontendLayer["  🖥️ Frontend — Next.js 14 · Vercel  "]
+        direction LR
+        CustomerUI["👤 Customer Portal\nChat · Tickets · Support Form"]
+        AdminUI["🔧 Admin Portal\nAnalytics · Conversations · Ticket Mgmt"]
+        StatusUI["🟢 Live Status Badge\n/health/build-status · 10s poll"]
+    end
+
+    subgraph ChannelLayer["  📡 Inbound Channels  "]
+        direction LR
+        WebCh["🌐 Web Chat\n/conversations/{id}/messages"]
+        WACh["💬 WhatsApp\nTwilio · /channels/whatsapp/inbound"]
+        EmailCh["✉️ Email\nSMTP + test mode · /email/inbound"]
+    end
 
     subgraph BackendLayer["  ⚡ FastAPI Backend — Hugging Face Spaces  "]
         direction TB
-        Routes["🔀 Route Handlers\n/auth · /chat · /tickets · /admin · /support"]
-        Adapters["📡 Channel Adapters\nWeb ✅   Email 🔧   WhatsApp 🔧"]
-        EventBus["🔄 Event Bus\nInMemoryBus dev  ·  KafkaBus prod"]
-        Services["⚙️ Services\nAuth · Chat · Tickets · Support · AI"]
+        Routes["🔀 Route Handlers\n/auth · /conversations · /tickets · /admin · /channels · /health"]
+        Pipeline["⚙️ Support Pipeline\nidentity resolution · conversation resume · message store"]
+        EventLog["📋 Event Logger\nresponse_generated · escalation_triggered · ticket_created"]
     end
 
-    subgraph AgentLayer["  🤖 AI Agent — GPT-4o-mini  "]
+    subgraph AILayer["  🤖 AI Layer — GPT-4o-mini  "]
         direction TB
-        Agent["🧠 SupportAgent\nTool-calling loop · max 8 iterations"]
-        Tools["🛠️ 5-Tool Workflow\nhistory → KB → ticket → escalate → respond"]
-        GPT["✨ OpenAI API\nGPT-4o-mini · JSON mode · temp 0.3"]
+        CtxBuilder["🔍 Context Builder\nrepeated issue · failed attempts · open ticket · cross-session"]
+        KBFetch["📚 KB Pre-fetch\nrelevant articles injected before LLM call"]
+        DecisionEng["🧠 Decision Engine\nLLM structured reply · category · priority · urgency · escalate"]
+        EscEngine["⚠️ Escalation Engine\nfrustration detection · first-message guard\ncalm follow-up suppression · issue-cycle reset"]
+        ToolLoop["🛠️ Tool Loop\nget_history → KB search → create_ticket → escalate → send_response"]
+        LLM["✨ OpenAI GPT-4o-mini\nJSON mode · temp 0.55 · 750 tokens"]
     end
 
     subgraph DataLayer["  🗄️ Data Layer — Neon PostgreSQL  "]
-        direction TB
-        Repos["📦 Repositories\nUser · Conv · Message · Ticket · Metrics · KB"]
+        direction LR
+        Repos["📦 Repositories\nUser · Customer · Conversation · Message · Ticket · KB"]
         PG[("🐘 PostgreSQL\nNeon Serverless")]
-        KBase[("📚 Knowledge Base\npgvector-ready")]
+        Metrics[("📊 Metrics & Events\nagent_metrics · system_events")]
     end
 
-    Browser -->|"HTTPS REST"| Routes
-    Routes --> Adapters
-    Adapters --> EventBus
-    EventBus --> Services
-    Services --> Agent
-    Agent --> Tools
-    Tools --> GPT
-    Tools --> Repos
-    Services --> Repos
+    FrontendLayer -->|"HTTPS REST + JWT"| Routes
+    ChannelLayer --> Routes
+    Routes --> Pipeline
+    Pipeline --> CtxBuilder
+    CtxBuilder --> KBFetch
+    KBFetch --> DecisionEng
+    DecisionEng --> EscEngine
+    EscEngine --> ToolLoop
+    ToolLoop --> LLM
+    ToolLoop --> Repos
+    Pipeline --> EventLog
+    Pipeline --> Repos
+    EventLog --> Metrics
     Repos --> PG
-    Repos --> KBase
+    Metrics --> PG
 
     classDef frontendStyle fill:#4f46e5,stroke:#3730a3,stroke-width:2px,color:#fff
+    classDef channelStyle fill:#0891b2,stroke:#0e7490,stroke-width:2px,color:#fff
     classDef backendStyle fill:#0369a1,stroke:#075985,stroke-width:2px,color:#fff
     classDef aiStyle fill:#6d28d9,stroke:#5b21b6,stroke-width:2px,color:#fff
-    classDef gptStyle fill:#312e81,stroke:#1e1b4b,stroke-width:2px,color:#fff
+    classDef llmStyle fill:#312e81,stroke:#1e1b4b,stroke-width:2px,color:#fff
     classDef dbStyle fill:#065f46,stroke:#064e3b,stroke-width:2px,color:#fff
 
-    class Browser frontendStyle
-    class Routes,Adapters,EventBus,Services backendStyle
-    class Agent,Tools aiStyle
-    class GPT gptStyle
-    class Repos,PG,KBase dbStyle
+    class CustomerUI,AdminUI,StatusUI frontendStyle
+    class WebCh,WACh,EmailCh channelStyle
+    class Routes,Pipeline,EventLog backendStyle
+    class CtxBuilder,KBFetch,DecisionEng,EscEngine,ToolLoop aiStyle
+    class LLM llmStyle
+    class Repos,PG,Metrics dbStyle
 ```
 
 <br/>
@@ -253,12 +273,17 @@ flowchart TD
 
 | Layer | Responsibility |
 |:------|:---------------|
-| **Routes** | HTTP handling — auth, validation, response serialisation |
-| **Channel Adapters** | Normalise channel-specific payloads into a shared `InboundMessage` schema |
-| **Event Bus** | Decouple ingest from processing — swap InMemory → Kafka with one env var |
-| **Services** | Orchestrate the pipeline — auth, ticket creation, message flow |
-| **AI Agent** | Run structured tool calls, classify intent, generate responses, decide escalation |
-| **Repositories** | Abstract all database queries — one class per entity |
+| **Frontend** | Next.js 14 SaaS UI — customer portal (chat, tickets, support form), admin portal (analytics, conversations, ticket management), live build-status badge |
+| **Channels** | Three active inbound adapters — Web (REST), WhatsApp (Twilio webhook), Email (SMTP / test mode) — all normalised to `InboundMessage` before the pipeline |
+| **Routes** | HTTP handling — auth, validation, response serialisation, channel dispatch |
+| **Support Pipeline** | Orchestrates the full turn: identity resolution, conversation resume by `thread_id`, user message store, AI agent call, AI reply store, event logging, metrics |
+| **Context Builder** | Pre-LLM: loads repeated-issue signals, failed-attempt counts, and open-ticket state from conversation history and cross-session DB records |
+| **KB Pre-fetch** | Retrieves the top-3 relevant knowledge-base articles before the LLM call and injects them as a system message — reply generation references real help content |
+| **Decision Engine** | Calls GPT-4o-mini in JSON mode; validates and returns a `SupportDecision` with reply, `category`, `priority`, `urgency`, `intent`, `confidence`, and `escalate` flag |
+| **Escalation Engine** | Post-LLM deterministic layer — frustration-keyword detection, first-message guard, calm follow-up suppression, issue-cycle reset, hard-rule escalation (legal/security) |
+| **Tool Loop** | Side-effects agent: get customer history → KB search → create ticket → escalate if needed → send response (5-tool strict sequence) |
+| **Event Logger** | Persists `response_generated`, `escalation_triggered`, and `ticket_created` events to `system_events`; queryable via `/metrics/events` |
+| **Repositories** | One class per entity — abstract all DB queries; `lazy="raise"` on all ORM relationships to prevent implicit N+1 loads |
 
 ---
 
