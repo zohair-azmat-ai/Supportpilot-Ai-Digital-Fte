@@ -15,9 +15,11 @@ class FakeRequest:
         self,
         form_payload: dict[str, str],
         url: str = "https://example.test/api/v1/channels/whatsapp/inbound",
+        method: str = "POST",
     ) -> None:
         self._form_payload = form_payload
         self.url = url
+        self.method = method
 
     async def form(self) -> dict[str, str]:
         return self._form_payload
@@ -67,6 +69,113 @@ class WhatsAppIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(result, WhatsAppSendResult)
         self.assertFalse(result.success)
         self.assertIn("not fully configured", result.error or "")
+
+
+class FirstContactEscalationTests(unittest.IsolatedAsyncioTestCase):
+    """Verify that the escalation engine never escalates on first contact
+    unless a hard rule (security / legal / explicit human request) applies."""
+
+    async def test_first_contact_blocks_llm_escalation(self) -> None:
+        """LLM choosing escalate=True on turn 1 must be suppressed."""
+        from app.ai.escalation_engine import escalation_engine
+        from app.ai.context_builder import ConversationContext
+        from app.schemas.ai_decision import SupportDecision
+
+        ctx = ConversationContext(is_first_contact=True, message_count_in_session=0)
+        decision = SupportDecision(
+            reply="Let me help you with that.",
+            intent="account",
+            category="account",
+            priority="medium",
+            sentiment="neutral",
+            urgency="medium",
+            confidence=0.8,
+            escalate=True,
+            escalation_reason="Open ticket exists — may be ongoing",
+        )
+
+        result = escalation_engine.evaluate(
+            context=ctx,
+            llm_decision=decision,
+            user_message="my account is not working",
+        )
+
+        self.assertFalse(result.escalate, "First-contact must NOT escalate")
+        self.assertEqual(result.escalation_level, "none")
+
+    async def test_first_contact_hard_rule_still_escalates(self) -> None:
+        """Hard rules (security keyword) must override first-contact protection."""
+        from app.ai.escalation_engine import escalation_engine
+        from app.ai.context_builder import ConversationContext
+        from app.schemas.ai_decision import SupportDecision
+
+        ctx = ConversationContext(is_first_contact=True, message_count_in_session=0)
+        decision = SupportDecision(
+            reply="Let me look into that.",
+            intent="account",
+            category="account",
+            priority="medium",
+            sentiment="neutral",
+            urgency="medium",
+            confidence=0.8,
+            escalate=False,
+        )
+
+        result = escalation_engine.evaluate(
+            context=ctx,
+            llm_decision=decision,
+            user_message="I think my account was hacked",
+        )
+
+        self.assertTrue(result.escalate, "Security keyword must escalate even on first contact")
+        self.assertEqual(result.escalation_cause, "security")
+
+    async def test_context_builder_no_repeated_issue_on_first_contact(self) -> None:
+        """First-contact messages with 'not working' must NOT set repeated_issue."""
+        from app.ai.context_builder import context_builder
+
+        ctx = await context_builder.build(
+            db=None,
+            user_id="test-user-123",
+            user_message="my login is not working",
+            conversation_history=[],  # empty = first contact
+        )
+
+        self.assertTrue(ctx.is_first_contact)
+        self.assertFalse(ctx.repeated_issue, "'not working' on first message must not set repeated_issue")
+        self.assertEqual(ctx.previous_failed_attempts, 0)
+
+    async def test_context_builder_repeated_issue_on_second_turn(self) -> None:
+        """repeated_issue should still be detectable on subsequent turns."""
+        from app.ai.context_builder import context_builder
+
+        history = [
+            {"sender_type": "user", "content": "my login is not working"},
+            {"sender_type": "ai", "content": "Have you tried resetting your password?"},
+        ]
+        ctx = await context_builder.build(
+            db=None,
+            user_id="test-user-123",
+            user_message="still not working after reset",
+            conversation_history=history,
+        )
+
+        self.assertFalse(ctx.is_first_contact)
+        # "still not working" keywords + prior turn → repeated_issue should be detected
+        self.assertTrue(ctx.repeated_issue)
+
+    async def test_sanitize_first_contact_reply_removes_bad_phrases(self) -> None:
+        """Reply sanitizer must strip 'still facing', 'ongoing issue', etc."""
+        from app.ai.agent import SupportAgent
+
+        dirty = (
+            "I can see you're still facing this issue. "
+            "Regarding your ongoing issue with login, let me assist you."
+        )
+        clean = SupportAgent._sanitize_first_contact_reply(dirty)
+
+        self.assertNotIn("still facing", clean)
+        self.assertNotIn("ongoing issue", clean)
 
 
 if __name__ == "__main__":

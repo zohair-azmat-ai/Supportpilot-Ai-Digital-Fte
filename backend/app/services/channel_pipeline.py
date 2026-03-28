@@ -106,6 +106,10 @@ async def run_inbound_support_pipeline(
         for m in (conv_with_msgs.messages if conv_with_msgs else [])
     ]
 
+    logger.info(
+        "[pipeline:triage] conversation_id=%s user_id=%s channel=%s turn=%d",
+        active_conv.id, user.id, channel, len(history),
+    )
     t0 = time.monotonic()
     ai_result = await support_agent.run(
         db=db,
@@ -115,6 +119,10 @@ async def run_inbound_support_pipeline(
         conversation_history=history,
     )
     response_ms = (time.monotonic() - t0) * 1000
+    logger.info(
+        "[pipeline:response] conversation_id=%s intent=%s escalated=%s response_ms=%.0f",
+        active_conv.id, ai_result.intent, ai_result.should_escalate, response_ms,
+    )
 
     ai_msg_metadata: dict[str, Any] = {
         "channel": channel,
@@ -158,6 +166,13 @@ async def run_inbound_support_pipeline(
 
     if ai_result.should_escalate:
         await conv_repo.update(active_conv.id, {"status": "escalated"})
+        logger.info(
+            "[pipeline:escalation] conversation_id=%s reason=%r level=%s cause=%s",
+            active_conv.id,
+            ai_result.escalation_reason,
+            getattr(ai_result, "escalation_level", "none"),
+            getattr(ai_result, "escalation_cause", None),
+        )
         await event_logger.log(
             db,
             event_logger.ISSUE_ESCALATED,

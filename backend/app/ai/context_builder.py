@@ -124,23 +124,36 @@ class ConversationContext:
             lines.append(f"⚠ {self.previous_failed_attempts} failed attempts detected. Consider escalation if issue persists.")
 
         if self.related_open_ticket_exists:
-            lines.append("⚠ An open ticket already exists for this user. This may be an ongoing unresolved issue.")
+            if self.is_first_contact:
+                # Don't imply an ongoing issue — treat this as a new request
+                lines.append(
+                    "ℹ This user has prior support history. "
+                    "Treat this as a new request unless the customer references past issues."
+                )
+            else:
+                lines.append("⚠ An open ticket already exists for this user. This may be an ongoing unresolved issue.")
 
         if self.similar_issue_found:
-            status_label = (
-                "UNRESOLVED — do NOT repeat previous troubleshooting steps"
-                if self.unresolved_similar_issue_exists
-                else "previously resolved"
-            )
-            lines.append(
-                f"⚠ Similar issue history: {self.similar_issue_count} related "
-                f"ticket(s) found ({status_label})."
-            )
-            if self.unresolved_similar_issue_exists:
+            if self.is_first_contact:
                 lines.append(
-                    "  Acknowledge the existing issue. Avoid generic troubleshooting. "
-                    "Consider escalation or referencing the open ticket."
+                    f"ℹ {self.similar_issue_count} related ticket(s) found in user history — "
+                    f"respond to this message as a fresh new request."
                 )
+            else:
+                status_label = (
+                    "UNRESOLVED — do NOT repeat previous troubleshooting steps"
+                    if self.unresolved_similar_issue_exists
+                    else "previously resolved"
+                )
+                lines.append(
+                    f"⚠ Similar issue history: {self.similar_issue_count} related "
+                    f"ticket(s) found ({status_label})."
+                )
+                if self.unresolved_similar_issue_exists:
+                    lines.append(
+                        "  Acknowledge the existing issue. Avoid generic troubleshooting. "
+                        "Consider escalation or referencing the open ticket."
+                    )
 
         if self.prior_escalation_in_session:
             lines.append("⚠ A prior escalation occurred in this session. Treat with high priority.")
@@ -236,8 +249,9 @@ class ConversationContextBuilder:
             1 for m in prior_user_msgs
             if any(kw in m for kw in _FAILED_ATTEMPT_KEYWORDS)
         )
-        # Also count the current message
-        if any(kw in msg for kw in _FAILED_ATTEMPT_KEYWORDS):
+        # Also count the current message — only on subsequent turns so that
+        # "not working" in a brand new message doesn't fake prior attempts.
+        if not ctx.is_first_contact and any(kw in msg for kw in _FAILED_ATTEMPT_KEYWORDS):
             ctx.previous_failed_attempts += 1
 
         # --- Repeated issue (topic overlap across recent turns) ---
@@ -251,8 +265,10 @@ class ConversationContextBuilder:
             if overlap_count >= 2:
                 ctx.repeated_issue = True
 
-        # Also flag via explicit repeated-issue keywords in current message
-        if any(kw in msg for kw in _REPEATED_ISSUE_KEYWORDS):
+        # Also flag via explicit repeated-issue keywords in current message —
+        # but only on subsequent turns to avoid misreading a first-contact
+        # message like "my login is not working" as a repeated issue.
+        if not ctx.is_first_contact and any(kw in msg for kw in _REPEATED_ISSUE_KEYWORDS):
             ctx.repeated_issue = True
             ctx.previous_failed_attempts = max(ctx.previous_failed_attempts, 1)
 

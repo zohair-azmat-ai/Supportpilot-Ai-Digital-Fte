@@ -228,11 +228,19 @@ class EscalationEngine:
             )
 
         # ------------------------------------------------------------------
-        # 2. Anti-over-escalation: block escalation on simple first contact
-        #    (only applies when the LLM did NOT choose to escalate)
+        # 2. First-contact hard block — no escalation on turn 1 unless a
+        #    hard rule already triggered above (security/legal/human request).
+        #    This applies regardless of the LLM decision so cross-session
+        #    context (open tickets, similar issues) never escalates a fresh
+        #    message.
         # ------------------------------------------------------------------
         is_first_contact = context.is_first_contact if context else True
-        if is_first_contact and not llm_decision.escalate:
+        if is_first_contact:
+            logger.info(
+                "EscalationEngine: first contact — suppressing escalation "
+                "(llm_decision.escalate=%s)",
+                llm_decision.escalate,
+            )
             return EscalationDecision(
                 escalate=False,
                 escalation_reason=None,

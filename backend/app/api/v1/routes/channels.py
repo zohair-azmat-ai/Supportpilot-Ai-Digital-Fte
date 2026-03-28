@@ -54,42 +54,21 @@ async def whatsapp_inbound(
     x_twilio_signature: str = Header(default="", alias="X-Twilio-Signature"),
 ) -> Response:
     """Receive and process an inbound WhatsApp message from Twilio."""
-    # ------------------------------------------------------------------ #
-    # DEBUG MODE — temporary patch to verify Twilio reaches this endpoint #
-    # ------------------------------------------------------------------ #
-    logger.info("=== WHATSAPP INBOUND POST HIT ===")
-    logger.info("DEBUG | method=%s url=%s", request.method, str(request.url))
-    logger.info("DEBUG | headers=%s", dict(request.headers))
+    logger.info("WhatsApp inbound | method=%s url=%s", request.method, str(request.url))
 
     try:
         form_data = await request.form()
         payload: dict[str, Any] = dict(form_data)
     except Exception as exc:
-        logger.error("DEBUG | failed to parse form body: %s", exc)
+        logger.error("WhatsApp: failed to parse form body: %s", exc)
         payload = {}
 
-    logger.info("DEBUG | raw form fields=%s", payload)
     logger.info(
-        "DEBUG | Body=%r From=%r To=%r MessageSid=%r",
-        payload.get("Body"),
+        "WhatsApp inbound | From=%r Body=%r MessageSid=%r",
         payload.get("From"),
-        payload.get("To"),
+        payload.get("Body"),
         payload.get("MessageSid"),
     )
-
-    # Twilio signature validation DISABLED for debug test
-    # (re-enable by removing this early return block)
-    debug_twiml = (
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        "<Response>"
-        "<Message>Debug reply from SupportPilot AI</Message>"
-        "</Response>"
-    )
-    logger.info("DEBUG | returning immediate debug reply, skipping AI pipeline")
-    return Response(content=debug_twiml, media_type="application/xml", status_code=200)
-    # ------------------------------------------------------------------ #
-    # END DEBUG MODE                                                       #
-    # ------------------------------------------------------------------ #
 
     if not settings.twilio_configured:
         logger.info("WhatsApp webhook called while Twilio credentials are not configured")

@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json as _json
 import logging
+import re
 from typing import Any
 
 from app.ai.client import get_openai_client
@@ -201,6 +202,22 @@ class SupportAgent:
         )
 
         # ------------------------------------------------------------------
+        # Phase 1d — First-contact reply sanitization (final safety net)
+        # Removes any escalation / history-assumption language that the LLM
+        # may have generated despite the first-contact guidance in the prompt.
+        # ------------------------------------------------------------------
+        if conv_context is not None and conv_context.is_first_contact:
+            sanitized_reply = self._sanitize_first_contact_reply(effective_decision.reply)
+            if sanitized_reply != effective_decision.reply:
+                logger.info(
+                    "Reply sanitized for first contact | conversation=%s",
+                    conversation_id,
+                )
+                effective_decision = effective_decision.model_copy(
+                    update={"reply": sanitized_reply}
+                )
+
+        # ------------------------------------------------------------------
         # Phase 2 — Tool loop: side effects (history, KB, ticket, escalate)
         # The effective_decision (merged LLM + escalation engine) is injected
         # so send_response and escalate_to_human use the final verdict.
@@ -332,6 +349,39 @@ class SupportAgent:
             kb_articles_found=ctx.kb_articles_found,
             ticket_created=ctx.ticket_created,
         )
+
+    # ------------------------------------------------------------------
+    # First-contact reply sanitizer
+    # ------------------------------------------------------------------
+
+    _FIRST_CONTACT_STRIP_PATTERNS = [
+        # "still facing / still experiencing / still having"
+        re.compile(r"(?i)\bstill\s+(facing|experiencing|having)\b[^.]*", re.IGNORECASE),
+        # "ongoing issue / existing issue / open issue"
+        re.compile(r"(?i)\b(ongoing|existing|open)\s+(issue|problem|ticket)\b", re.IGNORECASE),
+        # "I can see you're still / I can see you have an open"
+        re.compile(r"(?i)I can see (you'?re? still|you have an? (ongoing|existing|open))[^.]*", re.IGNORECASE),
+        # "since this issue is persisting / as this continues to be"
+        re.compile(r"(?i)(since this issue is|as this continues to be)[^.]*", re.IGNORECASE),
+        # "I see you have an open ticket / existing ticket"
+        re.compile(r"(?i)I see you have an? (open|existing) ticket[^.]*", re.IGNORECASE),
+    ]
+
+    @classmethod
+    def _sanitize_first_contact_reply(cls, reply: str) -> str:
+        """Strip escalation / history-assumption phrases from a first-contact reply.
+
+        Acts as a final safety net so the customer never sees 'still facing',
+        'ongoing issue', or 'existing ticket' on a fresh message.
+        """
+        sanitized = reply
+        for pattern in cls._FIRST_CONTACT_STRIP_PATTERNS:
+            sanitized = pattern.sub("", sanitized)
+        # Collapse multiple spaces / blank lines created by removal
+        sanitized = re.sub(r"[ \t]{2,}", " ", sanitized)
+        sanitized = re.sub(r"\n{3,}", "\n\n", sanitized)
+        sanitized = sanitized.strip()
+        return sanitized if sanitized else reply
 
     def _build_initial_messages(
         self,
