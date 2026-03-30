@@ -6,8 +6,11 @@ import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from fastapi import FastAPI
+import traceback
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.v1.router import api_router
 from app.core.config import settings
@@ -91,7 +94,26 @@ def create_app() -> FastAPI:
         redoc_url="/redoc",
         openapi_url="/openapi.json",
         lifespan=lifespan,
+        debug=True,
     )
+
+    # ------------------------------------------------------------------
+    # Global exception handler — logs full traceback for every unhandled
+    # exception so 500s are visible in the console during local debugging.
+    # Remove or gate on settings.ENVIRONMENT before deploying to prod.
+    # ------------------------------------------------------------------
+    @app.exception_handler(Exception)
+    async def _global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        logger.error(
+            "UNHANDLED EXCEPTION | %s %s\n%s",
+            request.method,
+            request.url,
+            traceback.format_exc(),
+        )
+        return JSONResponse(
+            status_code=500,
+            content={"error": type(exc).__name__, "detail": str(exc)},
+        )
 
     # ------------------------------------------------------------------
     # CORS

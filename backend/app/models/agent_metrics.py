@@ -56,6 +56,7 @@ class AgentMetrics(Base):
     )
     response_time_ms: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     model_used: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    escalated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     was_escalated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     escalation_reason: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     escalation_level: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
@@ -63,6 +64,7 @@ class AgentMetrics(Base):
     ticket_created: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     similar_issue_detected: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     kb_articles_found: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    kb_used: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

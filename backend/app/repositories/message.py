@@ -29,6 +29,8 @@ class MessageRepository(BaseRepository[Message]):
         conversation_id: str,
         sender_type: str,
         content: str,
+        role: Optional[str] = None,
+        channel: Optional[str] = None,
         intent: Optional[str] = None,
         ai_confidence: Optional[float] = None,
         sentiment: Optional[str] = None,
@@ -42,6 +44,8 @@ class MessageRepository(BaseRepository[Message]):
             conversation_id: Parent conversation ID.
             sender_type: One of 'user', 'ai', or 'agent'.
             content: Message text content.
+            role: Logical actor ('user', 'assistant'); defaults to sender_type.
+            channel: Communication channel ('web', 'email', 'whatsapp'); defaults to 'web'.
             intent: Detected intent label (AI messages only).
             ai_confidence: Confidence score 0-1 (AI messages only).
             sentiment: Customer sentiment (AI messages only).
@@ -56,6 +60,8 @@ class MessageRepository(BaseRepository[Message]):
             {
                 "conversation_id": conversation_id,
                 "sender_type": sender_type,
+                "role": role if role is not None else sender_type,
+                "channel": channel if channel is not None else "web",
                 "content": content,
                 "intent": intent,
                 "ai_confidence": ai_confidence,

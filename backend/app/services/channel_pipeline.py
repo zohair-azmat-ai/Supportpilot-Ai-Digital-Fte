@@ -41,8 +41,14 @@ async def run_inbound_support_pipeline(
     from app.repositories.message import MessageRepository
     from app.services.event_logger import event_logger
 
+    from app.repositories.customer import CustomerRepository
+
     conv_repo = ConversationRepository(db)
     msg_repo = MessageRepository(db)
+
+    # Resolve customer_id so it is never NULL on the conversation row.
+    customer = await CustomerRepository(db).get_by_user_id(user.id)
+    customer_id = customer.id if customer else None
 
     active_conv = None
     if inbound.thread_id:
@@ -61,6 +67,7 @@ async def run_inbound_support_pipeline(
     if active_conv is None:
         conv_data: dict[str, Any] = {
             "user_id": user.id,
+            "customer_id": customer_id,
             "channel": channel,
             "subject": inbound.subject[:500] if inbound.subject else None,
             "status": "active",
@@ -197,30 +204,36 @@ async def run_inbound_support_pipeline(
             details={"intent": ai_result.intent},
         )
 
+    # Metrics are recorded inside a savepoint so that a failure only rolls back
+    # the metrics insert and leaves the session clean for the outbound WhatsApp
+    # send that happens after this function returns.
     try:
-        metrics_repo = AgentMetricsRepository(db)
-        await metrics_repo.record({
-            "conversation_id": active_conv.id,
-            "user_id": user.id,
-            "channel": channel,
-            "intent_detected": ai_result.intent,
-            "confidence_score": ai_result.confidence,
-            "sentiment": getattr(ai_result, "sentiment", None),
-            "urgency": getattr(ai_result, "urgency", None),
-            "tools_called": ai_result.tools_called,
-            "iterations": ai_result.iterations,
-            "response_time_ms": response_ms,
-            "model_used": settings.OPENAI_MODEL,
-            "was_escalated": ai_result.should_escalate,
-            "escalation_reason": ai_result.escalation_reason,
-            "escalation_level": getattr(ai_result, "escalation_level", "none"),
-            "escalation_cause": getattr(ai_result, "escalation_cause", None),
-            "similar_issue_detected": getattr(ai_result, "similar_issue_detected", False),
-            "ticket_created": ai_result.ticket_created,
-            "kb_articles_found": ai_result.kb_articles_found,
-        })
+        async with db.begin_nested():
+            metrics_repo = AgentMetricsRepository(db)
+            await metrics_repo.record({
+                "conversation_id": active_conv.id,
+                "user_id": user.id,
+                "channel": channel,
+                "intent_detected": ai_result.intent,
+                "confidence_score": ai_result.confidence,
+                "sentiment": getattr(ai_result, "sentiment", None),
+                "urgency": getattr(ai_result, "urgency", None),
+                "tools_called": ai_result.tools_called,
+                "iterations": ai_result.iterations,
+                "response_time_ms": response_ms,
+                "model_used": settings.OPENAI_MODEL,
+                "escalated": bool(ai_result.should_escalate),
+                "was_escalated": bool(ai_result.should_escalate),
+                "escalation_reason": ai_result.escalation_reason,
+                "escalation_level": getattr(ai_result, "escalation_level", "none"),
+                "escalation_cause": getattr(ai_result, "escalation_cause", None),
+                "similar_issue_detected": getattr(ai_result, "similar_issue_detected", False),
+                "ticket_created": ai_result.ticket_created,
+                "kb_articles_found": ai_result.kb_articles_found,
+                "kb_used": bool(ai_result.kb_articles_found > 0),
+            })
     except Exception as exc:
-        logger.warning("Failed to record channel metrics: %s", exc)
+        logger.warning("Failed to record channel metrics (non-fatal): %s", exc)
 
     logger.info(
         "AI pipeline complete | channel=%s user=%s conv=%s intent=%s escalated=%s response_ms=%.0f",

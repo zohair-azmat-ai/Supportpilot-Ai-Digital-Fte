@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import uuid
 from typing import List, Optional
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.models.customer import Customer, CustomerIdentifier
 from app.repositories.base import BaseRepository
@@ -25,7 +27,9 @@ class CustomerRepository(BaseRepository[Customer]):
             The matching Customer instance, or ``None`` if not found.
         """
         result = await self.db.execute(
-            select(Customer).where(Customer.user_id == user_id)
+            select(Customer)
+            .options(selectinload(Customer.identifiers))
+            .where(Customer.user_id == user_id)
         )
         return result.scalars().first()
 
@@ -46,6 +50,7 @@ class CustomerRepository(BaseRepository[Customer]):
         """
         result = await self.db.execute(
             select(Customer)
+            .options(selectinload(Customer.identifiers))
             .join(
                 CustomerIdentifier,
                 CustomerIdentifier.customer_id == Customer.id,
@@ -76,6 +81,15 @@ class CustomerRepository(BaseRepository[Customer]):
         Returns:
             The newly created Customer instance (with identifier already flushed).
         """
+        # Always generate external_id so the NOT NULL DB column is never NULL.
+        # Callers that already include external_id in customer_data are not
+        # overridden — setdefault only fills the gap when it is absent.
+        customer_data.setdefault("external_id", str(uuid.uuid4()))
+        # account_tier — DB column is NOT NULL; default to "free" if not supplied.
+        customer_data.setdefault("account_tier", "free")
+        # is_vip — DB column is NOT NULL; default to False if not supplied.
+        customer_data.setdefault("is_vip", False)
+
         customer = self.model(**customer_data)
         self.db.add(customer)
         await self.db.flush()  # Ensure customer.id is available for the FK
@@ -84,6 +98,7 @@ class CustomerRepository(BaseRepository[Customer]):
             customer_id=customer.id,
             channel=channel,
             value=value,
+            identifier=value,   # mirrors value — DB NOT NULL column
             is_primary=True,
         )
         self.db.add(identifier)

@@ -15,6 +15,7 @@ signals derived from conversation history only.  The request never crashes.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -60,6 +61,26 @@ _STOP_WORDS = frozenset({
     "that", "this", "with", "on", "at", "can", "you", "your", "we",
     "not", "no", "do", "get", "got", "help", "please", "hi", "hey",
 })
+
+# Pure greeting phrases — when the entire message matches one of these,
+# treat it as first contact regardless of how many messages are in the
+# conversation history.  This prevents old conversation context from
+# poisoning a fresh "Hi" sent after days of silence.
+_PURE_GREETING_MESSAGES = frozenset({
+    "hi", "hello", "hey", "yo", "sup", "hiya", "greetings",
+    "salam", "salaam", "assalamualaikum", "assalam", "ws", "wslm",
+    "hi there", "hello there", "hey there",
+    "good morning", "good afternoon", "good evening", "good day",
+    "good morning!", "good afternoon!", "good evening!",
+})
+
+
+def _is_pure_greeting(msg: str) -> bool:
+    """Return True if the entire message is a simple greeting with no issue content."""
+    # Strip punctuation and normalise whitespace before matching
+    cleaned = re.sub(r"[^\w\s]", "", msg.strip().lower())
+    cleaned = " ".join(cleaned.split())
+    return cleaned in _PURE_GREETING_MESSAGES
 
 
 # ---------------------------------------------------------------------------
@@ -158,14 +179,19 @@ class ConversationContext:
         if self.prior_escalation_in_session:
             lines.append("⚠ A prior escalation occurred in this session. Treat with high priority.")
 
-        if self.prior_escalation_in_history:
-            lines.append("⚠ User has been escalated in a previous session. Handle carefully.")
+        # On first contact these three blocks are suppressed: injecting prior
+        # escalation history, past issue summaries, or full ticket/conv history
+        # into the LLM prompt causes it to generate "still facing" / "ongoing
+        # issue" language even when the message is fresh.
+        if not self.is_first_contact:
+            if self.prior_escalation_in_history:
+                lines.append("⚠ User has been escalated in a previous session. Handle carefully.")
 
-        if self.similar_issue_summary:
-            lines.append(f"\nSimilar past issues:\n{self.similar_issue_summary}")
+            if self.similar_issue_summary:
+                lines.append(f"\nSimilar past issues:\n{self.similar_issue_summary}")
 
-        if self.user_history_summary:
-            lines.append(f"\nRecent support history:\n{self.user_history_summary}")
+            if self.user_history_summary:
+                lines.append(f"\nRecent support history:\n{self.user_history_summary}")
 
         if self.last_ai_reply:
             # Truncate to keep prompt tight
@@ -235,6 +261,14 @@ class ConversationContextBuilder:
 
         ctx.message_count_in_session = len(prior_user_msgs)
         ctx.is_first_contact = ctx.message_count_in_session == 0
+
+        # Pure greeting override: if the entire message is a greeting (e.g. "Hi",
+        # "Assalamualaikum"), always treat it as first contact even if a prior
+        # conversation was resumed from history.  This prevents old issue context
+        # from leaking into fresh greeting replies.
+        if _is_pure_greeting(user_message):
+            ctx.is_first_contact = True
+            logger.debug("Pure greeting detected — forcing is_first_contact=True")
 
         # --- Frustration ---
         ctx.user_frustrated = any(kw in msg for kw in _FRUSTRATION_KEYWORDS)

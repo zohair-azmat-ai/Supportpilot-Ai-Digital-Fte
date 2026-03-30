@@ -178,6 +178,9 @@ class AgentContext:
         # Mutable state accumulated during the run
         self.ticket_id: str | None = None
         self.should_escalate: bool = False
+        # Ticket creation policy — set by SupportAgent based on issue context.
+        # False for greetings, first-contact guidance, and simple questions.
+        self.should_create_ticket: bool = True
         self.escalation_reason: str | None = None
         self.final_response: str | None = None
         self.intent: str = "general"
@@ -322,7 +325,19 @@ class ToolExecutor:
         Checks for an existing ticket on this conversation first to avoid
         creating duplicates when the agent is called across multiple turns.
         """
+        from app.repositories.customer import CustomerRepository as _CustRepo
         from app.repositories.ticket import TicketRepository
+
+        # Hard gate: respect the ticket-creation policy set by the agent.
+        # Greetings, first-contact guidance, and simple questions should not
+        # generate tickets — doing so is what caused every subsequent message
+        # to falsely detect an "open ticket" and mention it in the reply.
+        if not ctx.should_create_ticket:
+            ctx.ticket_created = False
+            return (
+                "Ticket creation skipped — this interaction does not require "
+                "a support ticket (greeting / first-contact guidance / informational)."
+            )
 
         ticket_repo = TicketRepository(ctx.db)
 
@@ -342,14 +357,28 @@ class ToolExecutor:
                 f"| priority={open_ticket.priority}"
             )
 
+        # -- Resolve customer (customer_id must never be None) --
+        cust_repo = _CustRepo(ctx.db)
+        customer = await cust_repo.get_by_user_id(ctx.user_id)
+        if not customer:
+            customer = await cust_repo.create_with_identifier(
+                {"user_id": ctx.user_id, "name": "Customer"},
+                channel="web",
+                value=f"web-{ctx.user_id}",
+            )
+        customer_id = customer.id
+
         # -- Create new ticket enriched with AI signals --
         ticket_data: dict = {
             "user_id": ctx.user_id,
+            "customer_id": customer_id,
             "conversation_id": ctx.conversation_id,
+            "subject": args["title"],
             "title": args["title"],
             "description": args["description"],
             "category": args["category"],
             "priority": args["priority"],
+            "escalated": bool(getattr(ctx, "should_escalate", False)),
         }
         if ctx.predecided is not None:
             ticket_data["sentiment"] = ctx.predecided.sentiment

@@ -41,7 +41,6 @@ class KnowledgeBaseRepository(BaseRepository[KnowledgeBase]):
         conditions = []
         for word in words:
             pattern = f"%{word}%"
-            conditions.append(KnowledgeBase.title.ilike(pattern))
             conditions.append(KnowledgeBase.content.ilike(pattern))
             conditions.append(KnowledgeBase.tags.ilike(pattern))
 
@@ -51,7 +50,7 @@ class KnowledgeBaseRepository(BaseRepository[KnowledgeBase]):
                 KnowledgeBase.is_active == True,  # noqa: E712
                 or_(*conditions),
             )
-            .order_by(KnowledgeBase.title)
+            .order_by(KnowledgeBase.created_at.desc())
             .limit(limit)
         )
         return list(result.scalars().all())
@@ -111,7 +110,7 @@ class KnowledgeBaseRepository(BaseRepository[KnowledgeBase]):
                 KnowledgeBase.category == category,
                 KnowledgeBase.is_active == True,  # noqa: E712
             )
-            .order_by(KnowledgeBase.title)
+            .order_by(KnowledgeBase.created_at.desc())
             .limit(limit)
         )
         return list(result.scalars().all())
@@ -142,7 +141,7 @@ class KnowledgeBaseRepository(BaseRepository[KnowledgeBase]):
         result = await self.db.execute(
             select(KnowledgeBase)
             .where(KnowledgeBase.is_active == True)  # noqa: E712
-            .order_by(KnowledgeBase.title)
+            .order_by(KnowledgeBase.created_at.desc())
             .offset(skip)
             .limit(limit)
         )

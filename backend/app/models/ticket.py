@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, Text
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -22,10 +22,22 @@ class Ticket(Base):
         primary_key=True,
         default=lambda: str(uuid.uuid4()),
     )
+    ticket_ref: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        unique=True,
+        default=lambda: f"TKT-{uuid.uuid4().hex[:8].upper()}",
+    )
     user_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
+    )
+    customer_id: Mapped[Optional[str]] = mapped_column(
+        String(36),
+        ForeignKey("customers.id", ondelete="SET NULL"),
+        nullable=True,
         index=True,
     )
     conversation_id: Mapped[Optional[str]] = mapped_column(
@@ -33,6 +45,16 @@ class Ticket(Base):
         ForeignKey("conversations.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
+    )
+    channel: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="web",
+    )
+    subject: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+        default="",
     )
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
@@ -47,6 +69,7 @@ class Ticket(Base):
         nullable=False,
         default="open",
     )
+    escalated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     sentiment: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     urgency: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     escalation_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import List, Optional
 
+from datetime import datetime, timedelta, timezone
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
@@ -90,12 +92,21 @@ class ConversationRepository(BaseRepository[Conversation]):
         thread_id: str,
         channel: str,
     ) -> Optional[Conversation]:
-        """Return the most recent conversation for this thread identifier within one channel."""
+        """Return the most recent ACTIVE conversation for this thread identifier within one channel.
+
+        Only conversations updated within the last 72 hours are considered for resumption.
+        Older or non-active conversations are ignored so that a fresh inbound message
+        (e.g. "Hi" after days of silence) always starts a new conversation rather than
+        resuming a stale thread with unrelated history.
+        """
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=72)
         result = await self.db.execute(
             select(Conversation)
             .where(
                 Conversation.thread_id == thread_id,
                 Conversation.channel == channel,
+                Conversation.status == "active",
+                Conversation.updated_at >= cutoff,
             )
             .order_by(Conversation.updated_at.desc())
         )
@@ -108,15 +119,17 @@ class ConversationRepository(BaseRepository[Conversation]):
     ) -> Optional[Conversation]:
         """Return the most recently updated active conversation for a user+channel pair.
 
-        More reliable than a linear scan through get_by_user() when the user
-        has multiple conversations.
+        Only conversations updated within the last 72 hours are considered, preventing
+        stale "active" conversations from being incorrectly resumed after long silences.
         """
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=72)
         result = await self.db.execute(
             select(Conversation)
             .where(
                 Conversation.user_id == user_id,
                 Conversation.channel == channel,
                 Conversation.status == "active",
+                Conversation.updated_at >= cutoff,
             )
             .order_by(Conversation.updated_at.desc())
         )

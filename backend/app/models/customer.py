@@ -31,6 +31,27 @@ class Customer(Base):
         primary_key=True,
         default=lambda: str(uuid.uuid4()),
     )
+    # external_id — stable public identifier; the DB column already exists with
+    # NOT NULL.  Defined here so SQLAlchemy includes it in every INSERT.
+    external_id: Mapped[str] = mapped_column(
+        String(36),
+        nullable=False,
+        unique=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    # account_tier — DB column exists with NOT NULL; default "free" for all
+    # new customers created through the channel identity path.
+    account_tier: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="free",
+    )
+    # is_vip — DB column exists with NOT NULL; default False for all new customers.
+    is_vip: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
     user_id: Mapped[Optional[str]] = mapped_column(
         String(36),
         ForeignKey("users.id", ondelete="SET NULL"),
@@ -102,6 +123,12 @@ class CustomerIdentifier(Base):
         String(500),
         nullable=False,
         # The actual identifier — e.g., an email address, phone number, or session token
+    )
+    # identifier — DB column exists with NOT NULL; mirrors `value` for
+    # backward compatibility with older schema versions that used this name.
+    identifier: Mapped[str] = mapped_column(
+        String(500),
+        nullable=False,
     )
     is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(

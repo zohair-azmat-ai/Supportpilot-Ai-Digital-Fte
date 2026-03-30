@@ -177,12 +177,29 @@ class EscalationEngine:
                 escalation_cause="llm_decision" if llm_decision.escalate else None,
             )
 
-    def build_escalation_note(self, esc: EscalationDecision) -> str:
-        """Return a short, natural escalation sentence for appending to the reply."""
-        return self._ESCALATION_NOTES.get(
-            esc.escalation_cause or "",
-            "I'm escalating this to a human support agent who can assist you further.",
-        )
+    def build_escalation_note(
+        self,
+        esc: EscalationDecision,
+        context: Optional["ConversationContext"] = None,
+    ) -> str:
+        """Return a short, natural escalation sentence for appending to the reply.
+
+        For the 'open_ticket_repeat' cause, the "I can see you have an open ticket"
+        phrasing is only used when the context confirms a real open ticket exists.
+        If the context says otherwise (or is unavailable), a generic message is
+        used instead so the AI never falsely claims an open ticket exists.
+        """
+        _GENERIC = "I'm escalating this to our support team so they can assist you further."
+
+        if esc.escalation_cause == "open_ticket_repeat":
+            has_real_open_ticket = (
+                context is not None and getattr(context, "related_open_ticket_exists", False)
+            )
+            if has_real_open_ticket:
+                return self._ESCALATION_NOTES["open_ticket_repeat"]
+            return _GENERIC
+
+        return self._ESCALATION_NOTES.get(esc.escalation_cause or "", _GENERIC)
 
     # ------------------------------------------------------------------
     # Internal

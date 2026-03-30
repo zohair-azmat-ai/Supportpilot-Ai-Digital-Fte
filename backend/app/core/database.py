@@ -226,8 +226,30 @@ _PATCHES = [
     """,
 
     # =========================================================================
-    # agent_metrics
+    # agent_metrics — core columns added after initial table creation
     # =========================================================================
+
+    # conversation_id — FK to conversations; the primary grouping key.
+    """
+    ALTER TABLE agent_metrics
+        ADD COLUMN IF NOT EXISTS conversation_id VARCHAR(36)
+        REFERENCES conversations(id) ON DELETE CASCADE
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_agent_metrics_conversation_id
+        ON agent_metrics (conversation_id)
+    """,
+
+    # user_id — FK to users; nullable so metrics survive user deletion.
+    """
+    ALTER TABLE agent_metrics
+        ADD COLUMN IF NOT EXISTS user_id VARCHAR(36)
+        REFERENCES users(id) ON DELETE SET NULL
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_agent_metrics_user_id
+        ON agent_metrics (user_id)
+    """,
 
     # channel — which channel the interaction came from (web / email / whatsapp)
     """
@@ -237,6 +259,42 @@ _PATCHES = [
     """
     CREATE INDEX IF NOT EXISTS ix_agent_metrics_channel
         ON agent_metrics (channel)
+    """,
+
+    # Core metrics fields — all nullable so existing rows are not affected.
+    """
+    ALTER TABLE agent_metrics
+        ADD COLUMN IF NOT EXISTS intent_detected VARCHAR(100)
+    """,
+    """
+    ALTER TABLE agent_metrics
+        ADD COLUMN IF NOT EXISTS confidence_score FLOAT
+    """,
+    """
+    ALTER TABLE agent_metrics
+        ADD COLUMN IF NOT EXISTS tools_called JSONB
+    """,
+    """
+    ALTER TABLE agent_metrics
+        ADD COLUMN IF NOT EXISTS iterations INTEGER
+    """,
+    """
+    ALTER TABLE agent_metrics
+        ADD COLUMN IF NOT EXISTS response_time_ms FLOAT
+    """,
+    """
+    ALTER TABLE agent_metrics
+        ADD COLUMN IF NOT EXISTS model_used VARCHAR(100)
+    """,
+    """
+    ALTER TABLE agent_metrics
+        ADD COLUMN IF NOT EXISTS escalation_reason VARCHAR(500)
+    """,
+
+    # created_at — DEFAULT NOW() backfills existing rows.
+    """
+    ALTER TABLE agent_metrics
+        ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()
     """,
 
     # =========================================================================
@@ -321,9 +379,58 @@ _PATCHES = [
     """,
 
     # =========================================================================
-    # messages — AI signal fields
+    # messages — core columns + AI signal fields
     # =========================================================================
 
+    # conversation_id — FK to conversations; the primary grouping key.
+    """
+    ALTER TABLE messages
+        ADD COLUMN IF NOT EXISTS conversation_id VARCHAR(36)
+        REFERENCES conversations(id) ON DELETE CASCADE
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_messages_conversation_id
+        ON messages (conversation_id)
+    """,
+
+    # sender_type — who sent the message: user / ai / agent.
+    """
+    ALTER TABLE messages
+        ADD COLUMN IF NOT EXISTS sender_type VARCHAR(50)
+    """,
+
+    # content — the message body text.
+    # DEFAULT '' backfills existing rows so they satisfy any NOT NULL constraint.
+    """
+    ALTER TABLE messages
+        ADD COLUMN IF NOT EXISTS content TEXT DEFAULT ''
+    """,
+
+    # intent — AI-detected intent label (nullable; only set on AI messages).
+    """
+    ALTER TABLE messages
+        ADD COLUMN IF NOT EXISTS intent VARCHAR(100)
+    """,
+
+    # ai_confidence — model confidence score 0-1 (nullable; AI messages only).
+    """
+    ALTER TABLE messages
+        ADD COLUMN IF NOT EXISTS ai_confidence FLOAT
+    """,
+
+    # metadata — arbitrary JSON payload for extra context.
+    """
+    ALTER TABLE messages
+        ADD COLUMN IF NOT EXISTS metadata JSONB
+    """,
+
+    # created_at — message timestamp; DEFAULT NOW() backfills existing rows.
+    """
+    ALTER TABLE messages
+        ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()
+    """,
+
+    # AI signal fields (sentiment / urgency / escalate).
     """
     ALTER TABLE messages
         ADD COLUMN IF NOT EXISTS sentiment VARCHAR(50)
@@ -366,9 +473,19 @@ _PATCHES = [
         ADD COLUMN IF NOT EXISTS similar_issue_detected BOOLEAN DEFAULT false
     """,
 
+    # kb_used — true when at least one KB article was found during the run
+    """
+    ALTER TABLE agent_metrics
+        ADD COLUMN IF NOT EXISTS kb_used BOOLEAN DEFAULT false
+    """,
+
     # was_escalated / ticket_created / kb_articles_found — core agent outcome fields
     # These were added to the model after the initial table creation.
     # DEFAULT values ensure existing rows are backfilled with safe values.
+    """
+    ALTER TABLE agent_metrics
+        ADD COLUMN IF NOT EXISTS escalated BOOLEAN DEFAULT false
+    """,
     """
     ALTER TABLE agent_metrics
         ADD COLUMN IF NOT EXISTS was_escalated BOOLEAN DEFAULT false
@@ -396,6 +513,233 @@ _PATCHES = [
     """
     CREATE INDEX IF NOT EXISTS ix_conversations_thread_id
         ON conversations (thread_id)
+    """,
+
+    # customer_id — optional FK to the CRM Customer record.
+    # Nullable so existing conversation rows are not broken by this patch.
+    """
+    ALTER TABLE conversations
+        ADD COLUMN IF NOT EXISTS customer_id VARCHAR(36)
+        REFERENCES customers(id) ON DELETE SET NULL
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_conversations_customer_id
+        ON conversations (customer_id)
+    """,
+
+    # started_at / ended_at — session timing columns.
+    # DEFAULT NOW() backfills existing rows with the patch time.
+    """
+    ALTER TABLE conversations
+        ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ DEFAULT NOW()
+    """,
+    """
+    ALTER TABLE conversations
+        ADD COLUMN IF NOT EXISTS ended_at TIMESTAMPTZ
+    """,
+
+    # =========================================================================
+    # customers — columns added after initial table creation
+    # =========================================================================
+
+    # user_id — optional FK linking a Customer to an auth User.
+    # This column is the reported missing column; all patches here are
+    # idempotent (IF NOT EXISTS) so they are safe to re-run on every startup.
+    """
+    ALTER TABLE customers
+        ADD COLUMN IF NOT EXISTS user_id VARCHAR(36)
+        REFERENCES users(id) ON DELETE SET NULL
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_customers_user_id
+        ON customers (user_id)
+    """,
+
+    # company / plan / notes — nullable profile fields that may be absent
+    # in databases created before these columns were added to the ORM model.
+    """
+    ALTER TABLE customers
+        ADD COLUMN IF NOT EXISTS company VARCHAR(255)
+    """,
+    """
+    ALTER TABLE customers
+        ADD COLUMN IF NOT EXISTS plan VARCHAR(100)
+    """,
+    """
+    ALTER TABLE customers
+        ADD COLUMN IF NOT EXISTS notes TEXT
+    """,
+
+    # is_active — boolean flag, default TRUE so existing rows stay active.
+    """
+    ALTER TABLE customers
+        ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true
+    """,
+
+    # Timestamps — DEFAULT NOW() safely backfills any rows that pre-date
+    # these columns being added.
+    """
+    ALTER TABLE customers
+        ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()
+    """,
+    """
+    ALTER TABLE customers
+        ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()
+    """,
+
+    # =========================================================================
+    # customer_identifiers — columns added after initial table creation
+    # =========================================================================
+
+    # customer_id — FK to customers; added WITHOUT NOT NULL so existing rows
+    # that pre-date this column are not rejected.  New rows always supply it.
+    """
+    ALTER TABLE customer_identifiers
+        ADD COLUMN IF NOT EXISTS customer_id VARCHAR(36)
+        REFERENCES customers(id) ON DELETE CASCADE
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_customer_identifiers_customer_id
+        ON customer_identifiers (customer_id)
+    """,
+
+    # channel — the communication channel for this identifier.
+    # DEFAULT 'web' safely backfills any existing rows.
+    # native_enum=False in the ORM means it is stored as plain VARCHAR.
+    """
+    ALTER TABLE customer_identifiers
+        ADD COLUMN IF NOT EXISTS channel VARCHAR(50) DEFAULT 'web'
+    """,
+
+    # value — the actual identifier string (email, phone, session token, etc.).
+    # DEFAULT '' backfills existing rows; the NOT NULL constraint is enforced
+    # at the application layer for all new inserts.
+    """
+    ALTER TABLE customer_identifiers
+        ADD COLUMN IF NOT EXISTS value VARCHAR(500) DEFAULT ''
+    """,
+
+    # is_primary — marks which identifier is the canonical one for a customer.
+    """
+    ALTER TABLE customer_identifiers
+        ADD COLUMN IF NOT EXISTS is_primary BOOLEAN DEFAULT false
+    """,
+
+    # created_at — timestamp for when the identifier was added.
+    """
+    ALTER TABLE customer_identifiers
+        ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()
+    """,
+
+    # =========================================================================
+    # knowledge_base — columns added after initial table creation
+    # =========================================================================
+
+    # title — article heading; DEFAULT '' backfills existing rows.
+    """
+    ALTER TABLE knowledge_base
+        ADD COLUMN IF NOT EXISTS title VARCHAR(500) DEFAULT ''
+    """,
+
+    # category — article category; DEFAULT 'general' backfills existing rows.
+    """
+    ALTER TABLE knowledge_base
+        ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'general'
+    """,
+
+    # tags — comma-separated keyword string for simple search (nullable).
+    """
+    ALTER TABLE knowledge_base
+        ADD COLUMN IF NOT EXISTS tags VARCHAR(500)
+    """,
+
+    # is_active — soft-delete flag; DEFAULT true keeps existing rows visible.
+    """
+    ALTER TABLE knowledge_base
+        ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true
+    """,
+
+    # source_url — optional link to source documentation (nullable).
+    """
+    ALTER TABLE knowledge_base
+        ADD COLUMN IF NOT EXISTS source_url VARCHAR(1000)
+    """,
+
+    # embedding — reserved for pgvector Phase 2 (nullable JSON).
+    """
+    ALTER TABLE knowledge_base
+        ADD COLUMN IF NOT EXISTS embedding JSONB
+    """,
+
+    # Timestamps — DEFAULT NOW() safely backfills any pre-existing rows.
+    """
+    ALTER TABLE knowledge_base
+        ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()
+    """,
+    """
+    ALTER TABLE knowledge_base
+        ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()
+    """,
+
+    # =========================================================================
+    # tickets — columns added after initial table creation
+    # =========================================================================
+
+    # customer_id — optional FK to CRM Customer; nullable so existing rows
+    # without a linked Customer are not affected.
+    """
+    ALTER TABLE tickets
+        ADD COLUMN IF NOT EXISTS customer_id VARCHAR(36)
+        REFERENCES customers(id) ON DELETE SET NULL
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_tickets_customer_id
+        ON tickets (customer_id)
+    """,
+
+    # channel — communication channel the ticket originated from.
+    # DEFAULT 'web' backfills existing rows.
+    """
+    ALTER TABLE tickets
+        ADD COLUMN IF NOT EXISTS channel VARCHAR(50) DEFAULT 'web'
+    """,
+
+    # subject — brief subject line for the ticket.
+    # DEFAULT '' backfills existing rows.
+    """
+    ALTER TABLE tickets
+        ADD COLUMN IF NOT EXISTS subject VARCHAR(255) DEFAULT ''
+    """,
+
+    # escalated — whether the ticket has been escalated to a human agent.
+    # DEFAULT false backfills existing rows safely.
+    """
+    ALTER TABLE tickets
+        ADD COLUMN IF NOT EXISTS escalated BOOLEAN DEFAULT false
+    """,
+
+    # ticket_ref — human-readable ticket reference (e.g. TKT-3F8A2C1D).
+    # DEFAULT '' backfills existing rows so NOT NULL is not violated.
+    """
+    ALTER TABLE tickets
+        ADD COLUMN IF NOT EXISTS ticket_ref VARCHAR(20) DEFAULT ''
+    """,
+
+    # messages — role and channel added after initial table creation
+    # =========================================================================
+
+    # role — logical actor for the message ('user', 'assistant', etc.).
+    # DEFAULT 'user' safely backfills existing rows.
+    """
+    ALTER TABLE messages
+        ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'user'
+    """,
+
+    # channel — communication channel for the message.
+    # DEFAULT 'web' safely backfills existing rows.
+    """
+    ALTER TABLE messages
+        ADD COLUMN IF NOT EXISTS channel VARCHAR(50) DEFAULT 'web'
     """,
 ]
 

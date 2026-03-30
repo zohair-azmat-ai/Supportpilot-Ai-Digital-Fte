@@ -28,6 +28,14 @@ class Conversation(Base):
         nullable=False,
         index=True,
     )
+    # customer_id — optional FK to CRM Customer; nullable so existing rows
+    # without a linked Customer record are not affected.
+    customer_id: Mapped[Optional[str]] = mapped_column(
+        String(36),
+        ForeignKey("customers.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     channel: Mapped[str] = mapped_column(
         Enum("web", "email", "whatsapp", name="conversation_channel", native_enum=False),
         nullable=False,
@@ -46,6 +54,15 @@ class Conversation(Base):
         String(500),
         nullable=True,
         index=True,
+    )
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    ended_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

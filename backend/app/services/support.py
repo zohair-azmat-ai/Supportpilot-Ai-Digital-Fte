@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import secrets
 import time
+from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -76,13 +77,26 @@ class SupportService:
             display_name=data.name,
         )
 
-        # 2. Create conversation
+        # 2. Resolve or create Customer record (guarantees customer_id is never None)
         conv_repo = ConversationRepository(db)
+        from app.repositories.customer import CustomerRepository as _CustRepo
+        cust_repo = _CustRepo(db)
+        _customer = await cust_repo.get_by_user_id(user.id)
+        if not _customer:
+            _customer = await cust_repo.create_with_identifier(
+                {"user_id": user.id, "name": data.name},
+                channel="web",
+                value=str(data.email),
+            )
+        customer_id = _customer.id
+
         conversation = await conv_repo.create({
             "user_id": user.id,
+            "customer_id": customer_id,
             "channel": "web",
             "subject": data.subject,
             "status": "active",
+            "started_at": datetime.now(timezone.utc),
         })
 
         msg_repo = MessageRepository(db)
@@ -182,11 +196,14 @@ class SupportService:
         else:
             fallback_ticket_data: dict = {
                 "user_id": user.id,
+                "customer_id": customer_id,
                 "conversation_id": conversation.id,
+                "subject": data.subject,
                 "title": data.subject,
                 "description": data.message,
                 "category": getattr(ai_result, "category", data.category),
                 "priority": getattr(ai_result, "priority", data.priority),
+                "escalated": bool(ai_result.should_escalate),
                 "sentiment": getattr(ai_result, "sentiment", None),
                 "urgency": getattr(ai_result, "urgency", None),
             }
@@ -207,6 +224,7 @@ class SupportService:
         # 7. Record metrics (non-blocking)
         try:
             from app.repositories.agent_metrics import AgentMetricsRepository
+            escalated_value = bool(ai_result.should_escalate) if hasattr(ai_result, "should_escalate") else False
             metrics_repo = AgentMetricsRepository(db)
             await metrics_repo.record({
                 "conversation_id": conversation.id,
@@ -220,7 +238,8 @@ class SupportService:
                 "iterations": ai_result.iterations,
                 "response_time_ms": response_ms,
                 "model_used": settings.OPENAI_MODEL,
-                "was_escalated": ai_result.should_escalate,
+                "escalated": escalated_value,
+                "was_escalated": escalated_value,
                 "escalation_reason": ai_result.escalation_reason,
                 "escalation_level": getattr(ai_result, "escalation_level", "none"),
                 "escalation_cause": getattr(ai_result, "escalation_cause", None),
@@ -233,7 +252,7 @@ class SupportService:
 
         confirmation = (
             f"Thank you for contacting SupportPilot, {data.name}. "
-            f"Your request has been received and a ticket (#{ticket.id[:8].upper()}) "
+            f"Your request has been received and a ticket (#{ticket.ticket_ref}) "
             "has been created. Our team will follow up with you shortly."
         )
 
@@ -277,22 +296,38 @@ class SupportService:
 
         # Create placeholder conversation
         conv_repo = ConversationRepository(db)
+        from app.repositories.customer import CustomerRepository as _CustRepo
+        cust_repo = _CustRepo(db)
+        _customer = await cust_repo.get_by_user_id(user.id)
+        if not _customer:
+            _customer = await cust_repo.create_with_identifier(
+                {"user_id": user.id, "name": data.name},
+                channel="web",
+                value=str(data.email),
+            )
+        customer_id = _customer.id
+
         conversation = await conv_repo.create({
             "user_id": user.id,
+            "customer_id": customer_id,
             "channel": "web",
             "subject": data.subject,
             "status": "active",
+            "started_at": datetime.now(timezone.utc),
         })
 
         # Create placeholder ticket immediately so caller has a reference
         ticket_repo = TicketRepository(db)
         ticket = await ticket_repo.create({
             "user_id": user.id,
+            "customer_id": customer_id,
             "conversation_id": conversation.id,
+            "subject": data.subject,
             "title": data.subject,
             "description": data.message,
             "category": data.category,
             "priority": data.priority,
+            "escalated": False,
         })
 
         # Publish to event bus (Kafka in production)
@@ -321,7 +356,7 @@ class SupportService:
             ticket_id=ticket.id,
             confirmation_message=(
                 f"Thank you, {data.name}. Your request has been received "
-                f"(ticket #{ticket.id[:8].upper()}). "
+                f"(ticket #{ticket.ticket_ref}). "
                 "Our AI agent is processing your request and will respond shortly."
             ),
             ai_response=(

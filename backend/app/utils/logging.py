@@ -23,7 +23,7 @@ def _configure_root_logger() -> None:
     handler.setFormatter(logging.Formatter(fmt=_LOG_FORMAT, datefmt=_DATE_FORMAT))
 
     root = logging.getLogger()
-    root.setLevel(logging.INFO)
+    root.setLevel(logging.DEBUG)
     # Avoid duplicate handlers if called more than once (e.g., in tests)
     if not root.handlers:
         root.addHandler(handler)

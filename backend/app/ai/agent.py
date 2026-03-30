@@ -51,20 +51,34 @@ AGENT_SYSTEM_PROMPT = """\
 You are SupportPilot AI — running in side-effects mode.
 
 The customer's reply has already been determined by the decision engine.
-Your ONLY job is to execute the following tools in order to log this interaction:
+Your ONLY job is to execute the following tools to log this interaction:
 
   1. get_customer_history(user_id)      — ALWAYS first
   2. search_knowledge_base(query)       — ALWAYS second
-  3. create_ticket(title, description, category, priority) — ALWAYS third
+  3. create_ticket(title, description, category, priority)
+       — ONLY when should_create_ticket=true in the decision context (see below).
+       — SKIP this tool entirely when should_create_ticket=false.
   4. escalate_to_human(reason, urgency) — ONLY if escalation_required=true (see context)
   5. send_response(message, intent, confidence) — ALWAYS last; terminates the loop
+
+TICKET CREATION POLICY — create_ticket is ONLY required when ANY of these are true:
+  a) escalation_required=true
+  b) repeated_issue=true
+  c) category is "billing" or "complaint"
+  d) category is "technical" and it is NOT the first contact turn
+
+DO NOT call create_ticket for:
+  - Greetings (hi, hello, hey, etc.)
+  - First-contact login / account guidance (password reset, account help on turn 1)
+  - Simple informational or general questions with no reported failure
+
+When should_create_ticket=false: go directly from search_knowledge_base to send_response.
 
 IMPORTANT:
 - For create_ticket: use the category and priority that match the customer's issue.
 - For send_response: the message you provide will be overridden by the pre-determined
   response. Just pass a brief summary. Set intent and confidence accurately.
 - DO NOT make up information about the customer's history.
-- Follow the tool order exactly.
 
 TOOL REFERENCE
 - get_customer_history(user_id): Returns prior tickets and conversations.
@@ -180,7 +194,7 @@ class SupportAgent:
         # escalation that's about to happen.
         upgraded_escalation = esc_decision.escalate and not decision.escalate
         if upgraded_escalation:
-            escalation_note = escalation_engine.build_escalation_note(esc_decision)
+            escalation_note = escalation_engine.build_escalation_note(esc_decision, conv_context)
             updated_reply = f"{decision.reply}\n\n{escalation_note}"
             effective_decision = decision.model_copy(update={
                 "reply": updated_reply,
@@ -219,13 +233,37 @@ class SupportAgent:
 
         # ------------------------------------------------------------------
         # Phase 2 — Tool loop: side effects (history, KB, ticket, escalate)
-        # The effective_decision (merged LLM + escalation engine) is injected
-        # so send_response and escalate_to_human use the final verdict.
-        # Similar issue signals from the context are also passed so _create_ticket
-        # can reference existing unresolved tickets when relevant.
         # ------------------------------------------------------------------
+
+        # Determine whether a ticket should be created for this interaction.
+        # Tickets are only needed when there is a real reportable problem:
+        #   - escalation triggered
+        #   - repeated / persistent issue
+        #   - billing or complaint categories (always trackable)
+        #   - technical issue on a non-first-contact turn
+        # Greetings, first-contact account guidance, and simple questions
+        # do NOT warrant ticket creation — creating tickets for them is what
+        # caused every follow-up message to falsely see an "open ticket".
+        _is_first = conv_context.is_first_contact if conv_context else True
+        _repeated = conv_context.repeated_issue if conv_context else False
+        should_create_ticket: bool = (
+            esc_decision.escalate
+            or _repeated
+            or effective_decision.category in ("billing", "complaint")
+            or (effective_decision.category == "technical" and not _is_first)
+        )
+        logger.info(
+            "Ticket policy: should_create_ticket=%s "
+            "(escalate=%s repeated=%s category=%s first_contact=%s) | conversation=%s",
+            should_create_ticket,
+            esc_decision.escalate, _repeated,
+            effective_decision.category, _is_first,
+            conversation_id,
+        )
+
         ctx = AgentContext(db=db, user_id=user_id, conversation_id=conversation_id)
         ctx.predecided = effective_decision  # inject merged decision
+        ctx.should_create_ticket = should_create_ticket
 
         if conv_context is not None:
             ctx.similar_issue_found = conv_context.similar_issue_found
@@ -237,7 +275,9 @@ class SupportAgent:
 
         executor = ToolExecutor()
         client = get_openai_client()
-        messages = self._build_initial_messages(conversation_history, user_message, effective_decision)
+        messages = self._build_initial_messages(
+            conversation_history, user_message, effective_decision, should_create_ticket
+        )
 
         try:
             for iteration in range(self.MAX_ITERATIONS):
@@ -354,46 +394,70 @@ class SupportAgent:
     # First-contact reply sanitizer
     # ------------------------------------------------------------------
 
-    _FIRST_CONTACT_STRIP_PATTERNS = [
-        # "still facing / still experiencing / still having"
-        re.compile(r"(?i)\bstill\s+(facing|experiencing|having)\b[^.]*", re.IGNORECASE),
-        # "ongoing issue / existing issue / open issue"
-        re.compile(r"(?i)\b(ongoing|existing|open)\s+(issue|problem|ticket)\b", re.IGNORECASE),
-        # "I can see you're still / I can see you have an open"
-        re.compile(r"(?i)I can see (you'?re? still|you have an? (ongoing|existing|open))[^.]*", re.IGNORECASE),
-        # "since this issue is persisting / as this continues to be"
-        re.compile(r"(?i)(since this issue is|as this continues to be)[^.]*", re.IGNORECASE),
-        # "I see you have an open ticket / existing ticket"
-        re.compile(r"(?i)I see you have an? (open|existing) ticket[^.]*", re.IGNORECASE),
-    ]
+    # Any of these phrases appearing in a first-contact reply means the LLM
+    # incorrectly assumed prior history.  Replace the entire reply rather than
+    # stripping fragments — a surgically cleaned sentence is still wrong.
+    _FIRST_CONTACT_BAD_PHRASES: tuple[str, ...] = (
+        "still facing",
+        "still experiencing",
+        "still having this",
+        "ongoing issue",
+        "ongoing problem",
+        "existing ticket",
+        "have an open ticket",
+        "has an open ticket",
+        "issue persists",
+        "issue is persisting",
+        "issue continues",
+        "this issue continues",
+        "previous attempts",
+        "prior attempts",
+        "as mentioned earlier",
+        "as we discussed",
+        "as discussed earlier",
+        "i can see this hasn't",
+        "i can see you've been",
+        "since this issue",
+        "open ticket",         # catches "you have an open ticket", "the open ticket"
+        "existing issue",
+    )
+
+    # Neutral clarification returned whenever the above guard fires
+    _FIRST_CONTACT_NEUTRAL_REPLY: str = (
+        "Got it — can you tell me what exactly isn't working?"
+    )
 
     @classmethod
     def _sanitize_first_contact_reply(cls, reply: str) -> str:
-        """Strip escalation / history-assumption phrases from a first-contact reply.
+        """Final safety net for first-contact replies.
 
-        Acts as a final safety net so the customer never sees 'still facing',
-        'ongoing issue', or 'existing ticket' on a fresh message.
+        If the reply contains ANY phrase that implies repeated history or a
+        prior unresolved issue, replace the entire reply with a neutral
+        clarification prompt.  Stripping fragments leaves broken sentences —
+        a full replacement is safer and cleaner.
         """
-        sanitized = reply
-        for pattern in cls._FIRST_CONTACT_STRIP_PATTERNS:
-            sanitized = pattern.sub("", sanitized)
-        # Collapse multiple spaces / blank lines created by removal
-        sanitized = re.sub(r"[ \t]{2,}", " ", sanitized)
-        sanitized = re.sub(r"\n{3,}", "\n\n", sanitized)
-        sanitized = sanitized.strip()
-        return sanitized if sanitized else reply
+        reply_lower = reply.lower()
+        for phrase in cls._FIRST_CONTACT_BAD_PHRASES:
+            if phrase in reply_lower:
+                logger.info(
+                    "First-contact reply contained bad phrase %r — replacing with neutral reply",
+                    phrase,
+                )
+                return cls._FIRST_CONTACT_NEUTRAL_REPLY
+        return reply
 
     def _build_initial_messages(
         self,
         conversation_history: list[dict],
         user_message: str,
         decision: Any,
+        should_create_ticket: bool = True,
     ) -> list[dict]:
         """Build the initial messages array for the tool loop.
 
         Includes the system prompt, up to the last 6 history entries, the new
-        user message, and a context note with the pre-determined decision so the
-        tool loop agent can create an accurately-categorised ticket.
+        user message, and a context note with the pre-determined decision and
+        ticket-creation policy flag so the tool loop follows the correct path.
         """
         messages: list[dict] = [{"role": "system", "content": AGENT_SYSTEM_PROMPT}]
 
@@ -414,7 +478,8 @@ class SupportAgent:
 
         messages.append({"role": "user", "content": user_message})
 
-        # Inject decision context so the tool loop creates the right ticket
+        # Inject decision context so the tool loop uses the right category/priority
+        # and knows whether to call create_ticket.
         messages.append({
             "role": "system",
             "content": (
@@ -422,7 +487,8 @@ class SupportAgent:
                 f"intent={decision.intent} category={decision.category} "
                 f"priority={decision.priority} urgency={decision.urgency} "
                 f"escalation_required={decision.escalate} "
-                f"confidence={decision.confidence:.2f}"
+                f"confidence={decision.confidence:.2f} "
+                f"should_create_ticket={should_create_ticket}"
             ),
         })
 

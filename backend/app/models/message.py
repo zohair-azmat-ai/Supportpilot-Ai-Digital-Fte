@@ -32,6 +32,16 @@ class Message(Base):
         Enum("user", "ai", "agent", name="message_sender_type", native_enum=False),
         nullable=False,
     )
+    role: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="user",
+    )
+    channel: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="web",
+    )
     content: Mapped[str] = mapped_column(Text, nullable=False)
     intent: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     ai_confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
