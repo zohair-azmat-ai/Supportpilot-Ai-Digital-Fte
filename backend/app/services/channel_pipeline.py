@@ -108,17 +108,25 @@ async def run_inbound_support_pipeline(
     )
 
     # Fetch the last 10 messages at the DB level (efficient LIMIT query).
-    # This is the conversation memory window — enough context for the AI to
-    # detect repeat issues / frustration without loading unbounded history.
+    # Include `intent` from AI messages so the context builder can detect
+    # same-intent repetition without keyword matching.
     recent_msgs = await msg_repo.get_recent_messages(active_conv.id, limit=10)
     history = [
-        {"sender_type": m.sender_type, "content": m.content}
+        {
+            "sender_type": m.sender_type,
+            "content": m.content,
+            "intent": getattr(m, "intent", None),
+        }
         for m in recent_msgs
     ]
 
+    # Pass the persisted last_intent as a top-level key so context_builder
+    # can detect same-intent repetition even when the history window is short.
+    stored_last_intent: str = getattr(active_conv, "last_intent", None) or ""
+
     logger.info(
-        "[pipeline:triage] conversation_id=%s user_id=%s channel=%s turn=%d",
-        active_conv.id, user.id, channel, len(history),
+        "[pipeline:triage] conversation_id=%s user_id=%s channel=%s turn=%d last_intent=%s",
+        active_conv.id, user.id, channel, len(history), stored_last_intent or "none",
     )
     t0 = time.monotonic()
     ai_result = await support_agent.run(
@@ -127,6 +135,7 @@ async def run_inbound_support_pipeline(
         conversation_id=active_conv.id,
         user_message=inbound.body,
         conversation_history=history,
+        stored_last_intent=stored_last_intent,
     )
     response_ms = (time.monotonic() - t0) * 1000
     logger.info(
@@ -173,6 +182,10 @@ async def run_inbound_support_pipeline(
             "tools_called": ai_result.tools_called,
         },
     )
+
+    # Persist the last detected intent on the conversation so it is available
+    # on the NEXT inbound message without reprocessing all history.
+    await conv_repo.update(active_conv.id, {"last_intent": ai_result.intent})
 
     if ai_result.should_escalate:
         await conv_repo.update(active_conv.id, {"status": "escalated"})

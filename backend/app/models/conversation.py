@@ -55,6 +55,11 @@ class Conversation(Base):
         nullable=True,
         index=True,
     )
+    # last_intent — intent category from the most recent AI response.
+    # Updated after every turn so the context builder can detect when the
+    # user re-raises the same topic without using explicit "still"/"again" language.
+    last_intent: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

@@ -63,6 +63,42 @@ _STOP_WORDS = frozenset({
     "not", "no", "do", "get", "got", "help", "please", "hi", "hey",
 })
 
+# ---------------------------------------------------------------------------
+# Topic-intent detection (lightweight, keyword-based)
+# Used to compare current message topic with last stored intent so the
+# system can detect same-intent repetition even without "still"/"again".
+# ---------------------------------------------------------------------------
+
+_TOPIC_INTENT_MAP: dict[str, frozenset] = {
+    "account": frozenset({
+        "password", "reset", "forgot password", "login", "sign in", "log in",
+        "locked out", "can't access", "access denied", "2fa", "otp", "verification code",
+        "account", "username",
+    }),
+    "billing": frozenset({
+        "payment", "charge", "billed", "billing", "refund", "invoice",
+        "subscription", "plan", "fee", "money", "transaction", "receipt",
+    }),
+    "technical": frozenset({
+        "app", "crash", "error", "bug", "loading", "not loading", "slow",
+        "broken", "not working", "website", "page", "screen", "install",
+    }),
+}
+
+
+def _detect_topic(msg: str) -> str:
+    """Return the best-matching intent topic for a message, or 'general'."""
+    msg_lower = msg.lower()
+    best_topic = "general"
+    best_score = 0
+    for topic, keywords in _TOPIC_INTENT_MAP.items():
+        score = sum(1 for kw in keywords if kw in msg_lower)
+        if score > best_score:
+            best_score = score
+            best_topic = topic
+    return best_topic if best_score >= 1 else "general"
+
+
 # Pure greeting phrases — when the entire message matches one of these,
 # treat it as first contact regardless of how many messages are in the
 # conversation history.  This prevents old conversation context from
@@ -127,6 +163,10 @@ class ConversationContext:
     # LLM directive so the model knows which response pattern to apply.
     # "first_attempt" | "second_attempt" | "third_attempt"
     response_strategy: str = "first_attempt"
+    # Intent continuity — tracks whether the user is re-raising the same
+    # topic so the LLM treats it as a continuation rather than a new issue.
+    last_intent: str = ""          # intent label from the previous AI turn
+    same_intent_repeat: bool = False  # True when current topic == last_intent
 
     def to_prompt_block(self) -> str:
         """Format as a concise context block for the LLM system message.
@@ -166,7 +206,15 @@ class ConversationContext:
                     "Max 50 words."
                 )
 
-        if self.repeated_issue:
+        if self.same_intent_repeat:
+            lines.append(
+                f"⚠ Same-intent repeat: user is raising '{self.last_intent}' again "
+                "after previous turns on this topic. "
+                "Treat this as a CONTINUATION — do NOT restart with basic steps. "
+                'Acknowledge: "I see you\'re still having trouble with this..." '
+                "then move straight to a different approach or escalate."
+            )
+        elif self.repeated_issue:
             attempts = self.previous_failed_attempts
             label = f"{attempts} prior failed attempt(s)" if attempts else "similar topic raised before"
             lines.append(f"⚠ Repeated issue — {label}. Vary your approach; do not repeat the same steps.")
@@ -262,6 +310,7 @@ class ConversationContextBuilder:
         user_id: str,
         user_message: str,
         conversation_history: list[dict],
+        stored_last_intent: str = "",
     ) -> ConversationContext:
         """Build a ConversationContext for the current message.
 
@@ -275,6 +324,11 @@ class ConversationContextBuilder:
             ConversationContext — always valid, never raises.
         """
         ctx = ConversationContext()
+
+        # Seed last_intent from the persisted DB value so intent continuity
+        # is detected even when the in-session history window is short.
+        if stored_last_intent:
+            ctx.last_intent = stored_last_intent
 
         # --- Signals from in-session history ---
         self._derive_in_session_signals(ctx, user_message, conversation_history)
@@ -360,6 +414,44 @@ class ConversationContextBuilder:
             ctx.response_strategy = "second_attempt"
         else:
             ctx.response_strategy = "third_attempt"
+
+        # --- Intent continuity detection ---
+        # Two sources for last_intent (in priority order):
+        #   1. Persisted DB value (seeded before this call via stored_last_intent)
+        #   2. Intent field on the last AI message in the history window
+        # If no DB value, derive from history.
+        if not ctx.last_intent:
+            for m in reversed(conversation_history):
+                if m.get("sender_type") in ("ai", "agent"):
+                    intent_from_msg = m.get("intent", "")
+                    if intent_from_msg:
+                        ctx.last_intent = intent_from_msg
+                        break
+
+        # Detect the topic of the CURRENT message.
+        current_topic = _detect_topic(user_message)
+
+        # Same-intent repeat: current topic matches last intent and this is not
+        # the first turn.  Greetings are excluded (topic="general").
+        if (
+            not ctx.is_first_contact
+            and ctx.last_intent
+            and current_topic != "general"
+            and ctx.last_intent == current_topic
+        ):
+            ctx.same_intent_repeat = True
+            # Ensure the response strategy reflects continuation, not fresh start.
+            # If the attempt counter is 0 (e.g. user rephrased without "still"),
+            # bump it so the LLM skips the step-giving phase.
+            if ctx.previous_failed_attempts == 0:
+                ctx.previous_failed_attempts = 1
+                ctx.response_strategy = "second_attempt"
+                logger.debug(
+                    "Intent continuity: same_intent_repeat=True last=%s current=%s "
+                    "— bumped attempts to 1, strategy=second_attempt",
+                    ctx.last_intent, current_topic,
+                )
+            ctx.repeated_issue = True
 
         # --- Prior escalation in this session (check AI messages) ---
         for m in conversation_history:

@@ -531,6 +531,13 @@ _PATCHES = [
         ON conversations (customer_id)
     """,
 
+    # last_intent — intent category of the most recent AI response.
+    # Nullable so existing rows are unaffected.
+    """
+    ALTER TABLE conversations
+        ADD COLUMN IF NOT EXISTS last_intent VARCHAR(100)
+    """,
+
     # started_at / ended_at — session timing columns.
     # DEFAULT NOW() backfills existing rows with the patch time.
     """

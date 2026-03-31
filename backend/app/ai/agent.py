@@ -118,6 +118,7 @@ class SupportAgent:
         conversation_id: str,
         user_message: str,
         conversation_history: list[dict],
+        stored_last_intent: str = "",
     ) -> AIResponse:
         """Process one customer message through the full decision + side-effect pipeline.
 
@@ -143,6 +144,7 @@ class SupportAgent:
                 user_id=user_id,
                 user_message=user_message,
                 conversation_history=conversation_history,
+                stored_last_intent=stored_last_intent,
             )
             logger.info(
                 "Context: turn=%d repeated=%s frustrated=%s "
