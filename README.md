@@ -623,7 +623,7 @@ All endpoints are prefixed with `/api/v1`. &nbsp; Interactive docs → [`/docs`]
 | **Phase 2 — Intelligence + Analytics** | Smart escalation · similar issue detection · event-driven analytics · agent metrics | ✅ Done |
 | **Phase 3 — Multi-channel** | WhatsApp + Email adapters · unified customer identity · email thread continuity · channel analytics | ✅ Done |
 | **Phase 4 — Advanced AI + Observability** | Real LLM decision engine · AI categorization (category/priority/urgency) · event lifecycle logging · escalation loop fixes · build status indicator · email test mode · KB pre-fetch | ✅ Done |
-| **Phase 5 — Memory + Retrieval** | Conversation memory layer · similar-issue retrieval · RAG over knowledge base (pgvector) · deeper context injection | 🔜 Next |
+| **Phase 5 — Memory + Retrieval** | Conversation memory layer · similar-issue retrieval · RAG over knowledge base (pgvector) · deeper context injection | ✅ Done |
 | **Phase 6 — Orchestration + Scale** | Multi-agent reasoning · full Kafka pipeline · WebSocket streaming · Kubernetes deployment with KEDA autoscaling | 🏢 Roadmap |
 
 The event bus and worker system are already implemented — switching to Kafka requires one env var. See [docs/specs/scaling-architecture.md](docs/specs/scaling-architecture.md).
