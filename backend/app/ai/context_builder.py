@@ -278,9 +278,10 @@ class ConversationContext:
             # The LLM should use this to acknowledge the pattern if relevant.
             if self.rag_summary:
                 lines.append(
-                    f"\nSimilar past issues found (message-level RAG):\n{self.rag_summary}\n"
-                    "If relevant, acknowledge: "
-                    '"I found a similar issue has come up before — here\'s what helped..."'
+                    f"\nSimilar past resolved issues:\n{self.rag_summary}\n"
+                    "If a solution is shown and relevant, reference it briefly: "
+                    '"I found a similar issue before — here\'s what helped..." '
+                    "Keep it under 2 sentences."
                 )
 
             if self.user_history_summary:

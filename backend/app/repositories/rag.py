@@ -2,23 +2,22 @@
 RAGRepository — message-content based similar issue retrieval.
 
 Searches the messages table for past user messages whose content overlaps
-with the current query.  This is the retrieval half of a lightweight RAG
-pipeline: no embeddings, no vector store — pure keyword matching in SQL.
+with the current query, then fetches the assistant response that followed
+each match.  Returns (user issue, solution) pairs for injection into the
+LLM system message.
 
 How it differs from SimilarIssueDetector:
   - SimilarIssueDetector compares ticket TITLES/DESCRIPTIONS (structured data)
   - RAGRepository compares raw MESSAGE CONTENT (what the user actually typed)
-
-The two signals are complementary: ticket similarity catches known issue patterns;
-message-content similarity catches phrasing and wording the user is repeating.
+    AND returns the paired assistant solution
 
 Retrieval strategy:
-  1. Extract up to 5 high-signal keywords from the query (stop-word filtered,
-     3+ character alphabetic words).
-  2. Search messages with ILIKE patterns — one condition per keyword, OR-joined.
-  3. Filter: sender_type='user', exclude current conversation.
-  4. Score each candidate in Python by counting matched keywords.
-  5. Return top-N by score (descending), ties broken by recency.
+  1. Extract up to 5 high-signal keywords (stop-word filtered, ≥ 3 chars).
+  2. SQL ILIKE search on messages WHERE sender_type='user', OR-joined keywords.
+  3. Python scoring: count matched keywords per candidate; keep top-N.
+  4. Single batched SQL: fetch the first AI message after each matched user
+     message in the same conversation (one query, not N queries).
+  5. Return (user_message, solution) pairs with a prompt-ready summary.
 """
 
 from __future__ import annotations
@@ -70,9 +69,10 @@ def _extract_keywords(text: str) -> list[str]:
 
 @dataclass
 class RAGResult:
-    """A single retrieved message that matches the query."""
+    """A matched (user issue, assistant solution) pair."""
 
     content: str          # the original user message text
+    solution: str         # the assistant reply that followed (empty if none found)
     conversation_id: str  # which conversation it came from
     score: int            # number of query keywords matched
     created_at: Any = None
@@ -140,6 +140,8 @@ class RAGRepository:
         current_conversation_id: Optional[str],
         limit: int,
     ) -> RAGSearchResult:
+        import json as _json
+
         from sqlalchemy import and_, or_, select
 
         from app.models.message import Message
@@ -149,31 +151,30 @@ class RAGRepository:
             # Too few meaningful keywords — skip retrieval to avoid noise
             return RAGSearchResult()
 
-        # Build OR-joined ILIKE conditions — one per keyword
+        # ── Step 1: find matching user messages ──────────────────────────────
         ilike_conditions = [Message.content.ilike(f"%{kw}%") for kw in keywords]
 
-        filters = [
+        user_filters = [
             Message.sender_type == "user",
             or_(*ilike_conditions),
         ]
         if current_conversation_id:
-            filters.append(Message.conversation_id != current_conversation_id)
+            user_filters.append(Message.conversation_id != current_conversation_id)
 
-        stmt = (
+        user_stmt = (
             select(Message)
-            .where(and_(*filters))
+            .where(and_(*user_filters))
             .order_by(Message.created_at.desc())
-            # Over-fetch so Python scoring can pick the best matches
-            .limit(limit * 5)
+            .limit(limit * 5)   # over-fetch for Python scoring
         )
 
-        result = await db.execute(stmt)
-        candidates = list(result.scalars().all())
+        user_result = await db.execute(user_stmt)
+        candidates = list(user_result.scalars().all())
 
         if not candidates:
             return RAGSearchResult()
 
-        # Score each candidate by keyword match count, then pick top-N
+        # ── Step 2: score and keep top-N ────────────────────────────────────
         query_kw_set = set(keywords)
         scored: list[tuple[int, Any]] = []
         for msg in candidates:
@@ -185,32 +186,82 @@ class RAGRepository:
         if not scored:
             return RAGSearchResult()
 
-        # Sort by score descending (recency already handled by SQL ORDER BY)
         scored.sort(key=lambda t: t[0], reverse=True)
         top = scored[:limit]
 
-        rag_results = [
-            RAGResult(
-                content=msg.content,
-                conversation_id=msg.conversation_id,
-                score=score,
-                created_at=msg.created_at,
-            )
-            for score, msg in top
-        ]
+        # ── Step 3: fetch paired assistant responses (single batched query) ──
+        # For each matched user message, we want the FIRST ai/agent message in
+        # the same conversation that was created AFTER the user message.
+        # One query: all AI messages in the matched conversations ordered by
+        # created_at ASC; then we find the immediate successor in Python.
+        conv_ids = list({msg.conversation_id for _, msg in top})
+        # Use the earliest timestamp as a lower-bound so the query is tight
+        earliest_ts = min(msg.created_at for _, msg in top)
 
-        # Build a concise, prompt-ready summary block
+        ai_stmt = (
+            select(Message)
+            .where(
+                Message.conversation_id.in_(conv_ids),
+                Message.sender_type.in_(["ai", "agent"]),
+                Message.created_at > earliest_ts,
+            )
+            .order_by(Message.created_at.asc())
+        )
+        ai_result = await db.execute(ai_stmt)
+        ai_messages = list(ai_result.scalars().all())
+
+        # Group AI messages by conversation for O(1) lookup
+        ai_by_conv: dict[str, list[Any]] = {}
+        for ai_msg in ai_messages:
+            ai_by_conv.setdefault(ai_msg.conversation_id, []).append(ai_msg)
+
+        # ── Step 4: build (user, solution) pairs ────────────────────────────
+        rag_results: list[RAGResult] = []
+        for score, user_msg in top:
+            # Find first AI message after this user message in the same conv
+            conv_ai = ai_by_conv.get(user_msg.conversation_id, [])
+            next_ai = next(
+                (m for m in conv_ai if m.created_at > user_msg.created_at),
+                None,
+            )
+
+            solution = ""
+            if next_ai:
+                raw = (next_ai.content or "").strip()
+                # Unwrap legacy JSON-wrapped AI content
+                try:
+                    parsed = _json.loads(raw)
+                    raw = parsed.get("reply") or parsed.get("response") or raw
+                except Exception:  # noqa: BLE001
+                    pass
+                solution = raw
+
+            rag_results.append(RAGResult(
+                content=user_msg.content,
+                solution=solution,
+                conversation_id=user_msg.conversation_id,
+                score=score,
+                created_at=user_msg.created_at,
+            ))
+
+        # ── Step 5: build WhatsApp-friendly prompt block ─────────────────────
+        # Format: bullet per pair, short previews, solution only when present
         summary_lines: list[str] = []
         for r in rag_results:
-            preview = r.content[:120]
-            if len(r.content) > 120:
-                preview += "…"
-            summary_lines.append(f"  • \"{preview}\" (matched {r.score} keyword(s))")
+            user_preview = r.content[:90] + ("…" if len(r.content) > 90 else "")
+            line = f"• User: \"{user_preview}\""
+            if r.solution:
+                sol_preview = r.solution[:100] + ("…" if len(r.solution) > 100 else "")
+                line += f"\n  Solution: \"{sol_preview}\""
+            summary_lines.append(line)
 
         summary = "\n".join(summary_lines)
+
+        pairs_with_solution = sum(1 for r in rag_results if r.solution)
         logger.info(
-            "RAG: found %d similar message(s) for query keywords %s",
+            "RAG: found %d pair(s) (%d with solution) for keywords %s",
             len(rag_results),
+            pairs_with_solution,
             keywords[:3],
         )
 
