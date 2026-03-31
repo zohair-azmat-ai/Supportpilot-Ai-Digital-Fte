@@ -21,7 +21,7 @@ git checkout hf-deploy
 git rebase main
 
 echo "→ Pushing hf-deploy → hf_v2/main..."
-git push hf_v2 hf-deploy:main
+git push hf_v2 hf-deploy:main --force-with-lease
 
 echo "→ Back to ${CURRENT_BRANCH}"
 git checkout "${CURRENT_BRANCH}"
