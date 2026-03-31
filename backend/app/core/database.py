@@ -143,10 +143,14 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
         try:
             yield session
-            await session.commit()
         except Exception:
             await session.rollback()
             raise
+        else:
+            # Only commit if no exception was raised — prevents committing a
+            # transaction that is already in a failed/rolled-back state, which
+            # would raise PendingRollbackError and mask the original error.
+            await session.commit()
         finally:
             await session.close()
 
@@ -649,6 +653,18 @@ _PATCHES = [
     """
     ALTER TABLE customer_identifiers
         ADD COLUMN IF NOT EXISTS is_primary BOOLEAN DEFAULT false
+    """,
+
+    # identifier — canonical identifier string (alias of value; some code paths
+    # write to this column directly).  DEFAULT '' backfills existing rows.
+    """
+    ALTER TABLE customer_identifiers
+        ADD COLUMN IF NOT EXISTS identifier VARCHAR(500) DEFAULT ''
+    """,
+    """
+    UPDATE customer_identifiers
+    SET identifier = value
+    WHERE identifier IS NULL OR identifier = ''
     """,
 
     # created_at — timestamp for when the identifier was added.
