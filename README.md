@@ -18,18 +18,26 @@ pinned: false
 
 <br/>
 
+<!-- Tech stack -->
 [![Next.js](https://img.shields.io/badge/Next.js_14-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)](https://nextjs.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://postgresql.org)
 [![OpenAI](https://img.shields.io/badge/OpenAI_GPT--4o-412991?style=for-the-badge&logo=openai&logoColor=white)](https://platform.openai.com)
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://typescriptlang.org)
+
+<!-- Status & license -->
 [![Status: Live](https://img.shields.io/badge/Status-Live-22c55e?style=for-the-badge&logo=vercel&logoColor=white)](https://supportpilot-ai-digital-fte.vercel.app)
 [![License: MIT](https://img.shields.io/badge/License-MIT-f59e0b?style=for-the-badge)](LICENSE)
 
+<br/>
+
+<!-- Channels & AI -->
 [![LLM Powered](https://img.shields.io/badge/LLM_Powered-GPT--4o_mini-6d28d9?style=flat-square&logo=openai&logoColor=white)](#-features)
 [![WhatsApp](https://img.shields.io/badge/WhatsApp-Integrated-25D366?style=flat-square&logo=whatsapp&logoColor=white)](#-multi-channel-design)
 [![Email](https://img.shields.io/badge/Email-Integrated-0ea5e9?style=flat-square&logo=gmail&logoColor=white)](#-multi-channel-design)
 [![Multi-Channel](https://img.shields.io/badge/Multi--Channel-Web_%7C_WhatsApp_%7C_Email-f59e0b?style=flat-square)](#-multi-channel-design)
+
+<!-- Features & architecture -->
 [![Event Logging](https://img.shields.io/badge/Event_Logging-Enabled-10b981?style=flat-square)](#-features)
 [![Analytics](https://img.shields.io/badge/Analytics-Dashboard-3b82f6?style=flat-square)](#-features)
 [![Escalation Logic](https://img.shields.io/badge/Escalation-Smart_Logic-ef4444?style=flat-square)](#-features)
@@ -76,7 +84,7 @@ Admin portal  →  admin@supportpilot.ai  /  Admin123!
 | Area | What was built |
 |:-----|:--------------|
 | **Polished SaaS UI** | Production-style frontend with separate customer and admin portals, conversations view, ticket management, and analytics dashboard |
-| **Build Status Indicator** | Live system status badge in the UI header — green/yellow/red, polled every 10 seconds from `/health/build-status` |
+| **Build Status Indicator** | Live system status badge in the UI header — green/yellow/red, polled every 10 seconds from `/health` |
 | **WhatsApp Integration** | Full Twilio-based inbound/outbound WhatsApp support — escalation handling, follow-up suppression, duplicate webhook protection, fresh-issue-cycle reset |
 | **Email Integration** | Inbound email pipeline via `POST /email/inbound`; test mode runs the full AI pipeline even when the Gmail provider is disabled; SMTP outbound when configured |
 | **Real LLM Upgrade** | Moved from scripted keyword fallbacks to a structured GPT-4o-mini decision engine — replies are human-like, issue-specific, and context-aware |
@@ -162,7 +170,7 @@ This is not a tutorial project or a hackathon demo. It is a **production-style m
 | **Multi-Channel** | Web ✅ · WhatsApp ✅ (Twilio) · Email ✅ (SMTP / test mode) — same AI pipeline for all three |
 | **Event-Driven Bus** | InMemoryEventBus for dev · KafkaEventBus for prod — one env var to switch |
 | **Agent Metrics** | Every AI call logged: intent, category, priority, urgency, confidence, tools called, response time, escalation status |
-| **Build Status Indicator** | Live UI badge polls `/health/build-status` every 10 s — green (Live) / yellow (Rebuilding) / red (Offline) |
+| **Build Status Indicator** | Live UI badge polls `/health` every 10 s — green (Live) / red (Offline) |
 
 ---
 
@@ -212,7 +220,7 @@ flowchart TD
         direction LR
         CustomerUI["👤 Customer Portal\nChat · Tickets · Support Form"]
         AdminUI["🔧 Admin Portal\nAnalytics · Conversations · Ticket Mgmt"]
-        StatusUI["🟢 Live Status Badge\n/health/build-status · 10s poll"]
+        StatusUI["🟢 Live Status Badge\n/health · 10s poll"]
     end
 
     subgraph ChannelLayer["  📡 Inbound Channels  "]
