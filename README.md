@@ -623,7 +623,7 @@ All endpoints are prefixed with `/api/v1`. &nbsp; Interactive docs → [`/docs`]
 | **Phase 2 — Intelligence + Analytics** | Smart escalation · similar issue detection · event-driven analytics · agent metrics | ✅ Done |
 | **Phase 3 — Multi-channel** | WhatsApp + Email adapters · unified customer identity · email thread continuity · channel analytics | ✅ Done |
 | **Phase 4 — Advanced AI + Observability** | Real LLM decision engine · AI categorization (category/priority/urgency) · event lifecycle logging · escalation loop fixes · build status indicator · email test mode · KB pre-fetch | ✅ Done |
-| **Phase 5 — Memory + Retrieval** | Conversation memory layer · similar-issue retrieval · RAG over knowledge base (pgvector) · deeper context injection | ✅ Done |
+| **Phase 5 — Memory + Retrieval** | Conversation memory layer · similar-issue retrieval · basic message-level RAG implemented · deeper context injection | ✅ Done |
 | **Phase 6 — Orchestration + Scale** | Multi-agent reasoning · full Kafka pipeline · WebSocket streaming · Kubernetes deployment with KEDA autoscaling | 🏢 Roadmap |
 
 The event bus and worker system are already implemented — switching to Kafka requires one env var. See [docs/specs/scaling-architecture.md](docs/specs/scaling-architecture.md).
@@ -632,15 +632,19 @@ The event bus and worker system are already implemented — switching to Kafka r
 
 ## 🔮 Future Features
 
-- [ ] **Conversation memory layer** — Persist and retrieve per-user issue history across sessions for richer context injection
-- [ ] **Similar-issue retrieval** — Surface semantically related past tickets to the AI before reply generation (pgvector / Pinecone)
-- [ ] **RAG knowledge base** — Company docs embedded and retrieved at query time; plugs directly into the KB pre-fetch pipeline
+- [x] **Conversation memory layer** — In-session history window, intent memory (`last_intent`), repeat-attempt strategy (first / second / third turn), and same-intent continuation detection — live on WhatsApp and web
+- [x] **Similar-issue retrieval** — Keyword-overlap ticket detection and message-level RAG returning (user issue, assistant solution) pairs injected into the LLM prompt — live
+- [x] **Intent memory** — `conversation.last_intent` persisted per turn; context builder detects same-topic repetition and routes to continuation flow instead of restarting — live
+- [ ] **Advanced RAG knowledge base** — Company docs embedded and retrieved semantically at query time (pgvector / Pinecone / Qdrant); replaces current keyword-ILIKE search with dense vector similarity
 - [ ] **Multi-agent orchestration** — Triage agent + specialist agents (billing, technical, account) with a router deciding dispatch
 - [ ] **WebSocket streaming** — Real-time GPT token streaming to the chat UI
 - [ ] **Human handoff UI** — Admin live-chat takeover for escalated conversations with full context hand-off
 - [ ] **Deeper observability** — Resolution time trends, CSAT scores, per-channel volume heatmaps, SLA breach alerts
 - [ ] **SLA automation** — Auto-escalation when tickets breach time or priority thresholds
-- [ ] **Multi-tenant workspaces** — Workspace isolation for B2B SaaS usage
+- [ ] **SaaS monetization** — Subscription plans (Free / Pro / Team), usage limits, and billing integration; workspace-level feature gating
+- [ ] **Stripe billing integration** — Checkout, subscription lifecycle, plan upgrades / downgrades, and webhook-driven entitlement updates
+- [ ] **Usage metering** — Per-workspace message volume, support throughput, and AI cost tracking with configurable hard/soft limits
+- [ ] **Multi-tenant workspaces** — Full workspace isolation for B2B SaaS usage; per-tenant model config, KB, and escalation rules
 - [ ] **Fine-tuned model** — Domain-specific fine-tuning on resolved ticket history for lower latency and higher accuracy
 
 ---
