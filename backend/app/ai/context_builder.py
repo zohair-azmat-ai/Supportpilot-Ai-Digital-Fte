@@ -167,6 +167,9 @@ class ConversationContext:
     # topic so the LLM treats it as a continuation rather than a new issue.
     last_intent: str = ""          # intent label from the previous AI turn
     same_intent_repeat: bool = False  # True when current topic == last_intent
+    # RAG retrieval — similar past user messages from the messages table
+    rag_similar_messages: list = field(default_factory=list)  # list[RAGResult]
+    rag_summary: str = ""          # prompt-ready formatted block
 
     def to_prompt_block(self) -> str:
         """Format as a concise context block for the LLM system message.
@@ -270,6 +273,15 @@ class ConversationContext:
 
             if self.similar_issue_summary:
                 lines.append(f"\nSimilar past issues:\n{self.similar_issue_summary}")
+
+            # RAG retrieval block — similar past messages from the messages table.
+            # The LLM should use this to acknowledge the pattern if relevant.
+            if self.rag_summary:
+                lines.append(
+                    f"\nSimilar past issues found (message-level RAG):\n{self.rag_summary}\n"
+                    "If relevant, acknowledge: "
+                    '"I found a similar issue has come up before — here\'s what helped..."'
+                )
 
             if self.user_history_summary:
                 lines.append(f"\nRecent support history:\n{self.user_history_summary}")
@@ -579,6 +591,26 @@ class ConversationContextBuilder:
                         sim.similar_issue_count,
                         "unresolved" if sim.unresolved_similar_issue_exists else "resolved",
                     )
+
+            # --- RAG: message-content similarity search ---
+            # Searches raw user message text (not just ticket titles) for past
+            # messages with similar phrasing.  Complements the ticket-based
+            # similar_issue_detector above.
+            from app.repositories.rag import rag_repository
+
+            rag_result = await rag_repository.find_similar_messages(
+                db=db,
+                query=user_message,
+                current_conversation_id=None,
+                limit=3,
+            )
+            if rag_result.found:
+                ctx.rag_similar_messages = rag_result.results
+                ctx.rag_summary = rag_result.summary
+                logger.info(
+                    "Context: RAG found %d similar message(s)",
+                    len(rag_result.results),
+                )
 
         except Exception as exc:  # noqa: BLE001
             logger.warning(
