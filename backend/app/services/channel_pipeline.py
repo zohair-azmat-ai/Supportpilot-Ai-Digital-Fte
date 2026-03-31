@@ -139,8 +139,10 @@ async def run_inbound_support_pipeline(
     )
     response_ms = (time.monotonic() - t0) * 1000
     logger.info(
-        "[pipeline:response] conversation_id=%s intent=%s escalated=%s response_ms=%.0f",
-        active_conv.id, ai_result.intent, ai_result.should_escalate, response_ms,
+        "[pipeline:response] conversation_id=%s intent=%s escalated=%s "
+        "routed_agent=%s response_ms=%.0f",
+        active_conv.id, ai_result.intent, ai_result.should_escalate,
+        getattr(ai_result, "routed_agent", "general"), response_ms,
     )
 
     ai_msg_metadata: dict[str, Any] = {
@@ -247,6 +249,7 @@ async def run_inbound_support_pipeline(
                 "ticket_created": ai_result.ticket_created,
                 "kb_articles_found": ai_result.kb_articles_found,
                 "kb_used": bool(ai_result.kb_articles_found > 0),
+                "routed_agent": getattr(ai_result, "routed_agent", "general"),
             })
     except Exception as exc:
         logger.warning("Failed to record channel metrics (non-fatal): %s", exc)

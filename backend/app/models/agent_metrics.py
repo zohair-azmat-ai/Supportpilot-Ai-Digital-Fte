@@ -65,6 +65,10 @@ class AgentMetrics(Base):
     similar_issue_detected: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     kb_articles_found: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     kb_used: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Phase 6 — which specialist agent handled this turn (or "general")
+    routed_agent: Mapped[Optional[str]] = mapped_column(
+        String(50), nullable=True, default="general"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

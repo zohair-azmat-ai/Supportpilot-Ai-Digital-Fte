@@ -647,7 +647,7 @@ The event bus and worker system are already implemented — switching to Kafka r
 - [x] **Similar-issue retrieval** — Keyword-overlap ticket detection and message-level RAG returning (user issue, assistant solution) pairs injected into the LLM prompt — live
 - [x] **Intent memory** — `conversation.last_intent` persisted per turn; context builder detects same-topic repetition and routes to continuation flow instead of restarting — live
 - [ ] **Advanced RAG knowledge base** — Company docs embedded and retrieved semantically at query time (pgvector / Pinecone / Qdrant); replaces current keyword-ILIKE search with dense vector similarity
-- [x] **Multi-agent routing base** — `RouterAgent` dispatches by intent/category to `BillingAgent`, `TechnicalAgent`, `AccountAgent` — `agents/` layer created, pipeline wiring is next
+- [x] **Multi-agent routing (live)** — `RouterAgent` dispatches by intent/category to `BillingAgent`, `TechnicalAgent`, `AccountAgent` — wired into the live pipeline at Phase 1b.5, after decision engine, before escalation; `routed_agent` tracked in logs and metrics
 - [ ] **Multi-agent orchestration (full)** — LLM-specialised agents with shared context, cross-agent handoff, and audit trail
 - [ ] **WebSocket streaming** — Real-time GPT token streaming to the chat UI
 - [ ] **Human handoff UI** — Admin live-chat takeover for escalated conversations with full context hand-off

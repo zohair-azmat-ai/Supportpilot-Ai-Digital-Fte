@@ -203,6 +203,35 @@ class SupportAgent:
         )
 
         # ------------------------------------------------------------------
+        # Phase 1b.5 — Specialist agent routing (Phase 6)
+        # RouterAgent picks a specialist based on category/intent.
+        # If the specialist is confident (>= 0.70), its reply replaces the
+        # decision engine's reply text.  All classification metadata (intent,
+        # category, priority, escalate flag) from the decision engine is kept —
+        # the specialist only enriches the response text.
+        # Escalation, ticket creation, and the tool loop run unchanged.
+        # Any failure here falls through silently to the existing flow.
+        # ------------------------------------------------------------------
+        routed_agent: str = "general"
+        specialist_result = await self._try_specialist_agent(
+            decision=decision,
+            user_message=user_message,
+            conv_context=conv_context,
+            user_id=user_id,
+            conversation_id=conversation_id,
+            db=db,
+        )
+        if specialist_result is not None:
+            routed_agent = specialist_result.specialist
+            decision = decision.model_copy(update={"reply": specialist_result.reply})
+            logger.info(
+                "Specialist override: agent=%s confidence=%.2f | conversation=%s",
+                routed_agent, specialist_result.confidence, conversation_id,
+            )
+        else:
+            logger.debug("Routing: no specialist match — general flow | conversation=%s", conversation_id)
+
+        # ------------------------------------------------------------------
         # Phase 1c — Escalation engine: deterministic post-processing
         # Supplements/overrides LLM escalation with rule-based hard checks
         # (security, legal, explicit human request, frustration, etc.)
@@ -409,11 +438,83 @@ class SupportAgent:
             similar_issue_detected=(
                 conv_context.similar_issue_found if conv_context is not None else False
             ),
+            routed_agent=routed_agent,
             tools_called=ctx.tools_called,
             iterations=ctx.iterations,
             kb_articles_found=ctx.kb_articles_found,
             ticket_created=ctx.ticket_created,
         )
+
+    # ------------------------------------------------------------------
+    # Phase 6 — Specialist agent routing
+    # ------------------------------------------------------------------
+
+    # Minimum specialist confidence to prefer specialist reply over the
+    # decision engine's reply.  Below this threshold we fall through.
+    _SPECIALIST_CONFIDENCE_THRESHOLD: float = 0.70
+
+    async def _try_specialist_agent(
+        self,
+        decision: Any,
+        user_message: str,
+        conv_context: Any,
+        user_id: str,
+        conversation_id: str,
+        db: Any,
+    ):
+        """Route to a specialist agent if one matches category/intent.
+
+        Returns a SpecialistResponse if the specialist handled the request
+        with sufficient confidence, or None to fall through to general flow.
+
+        Failures are always caught and return None — this block must never
+        break the main pipeline.
+        """
+        try:
+            from app.agents.router_agent import router_agent
+            from app.agents.specialist_agents.billing_agent import SpecialistRequest
+
+            specialist = router_agent.resolve(
+                category=getattr(decision, "category", None),
+                intent=getattr(decision, "intent", None),
+            )
+            if specialist is None:
+                return None
+
+            context_block = ""
+            if conv_context is not None:
+                try:
+                    context_block = conv_context.to_prompt_block()
+                except Exception:  # noqa: BLE001
+                    pass
+
+            req = SpecialistRequest(
+                message=user_message,
+                user_id=user_id,
+                conversation_id=conversation_id,
+                context_block=context_block,
+            )
+            response = await specialist.handle(req, db=db)
+
+            if response.confidence < self._SPECIALIST_CONFIDENCE_THRESHOLD:
+                logger.info(
+                    "Specialist %s below threshold (%.2f < %.2f) — falling back | conversation=%s",
+                    response.specialist,
+                    response.confidence,
+                    self._SPECIALIST_CONFIDENCE_THRESHOLD,
+                    conversation_id,
+                )
+                return None
+
+            return response
+
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Specialist routing failed (non-fatal): %s | conversation=%s",
+                exc,
+                conversation_id,
+            )
+            return None
 
     # ------------------------------------------------------------------
     # Repeat-keyword detection (safety net for context builder misses)

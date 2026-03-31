@@ -55,6 +55,8 @@ class AIResponse:
     escalation_cause: Optional[str] = None  # analytics label
     # Similar issue detection
     similar_issue_detected: bool = False
+    # Phase 6 — multi-agent routing
+    routed_agent: str = "general"   # "general" | "billing" | "technical" | "account"
     # Agent-run metadata
     tools_called: List[str] = field(default_factory=list)
     iterations: int = 0

@@ -503,6 +503,13 @@ _PATCHES = [
         ADD COLUMN IF NOT EXISTS kb_articles_found INTEGER DEFAULT 0
     """,
 
+    # routed_agent — Phase 6 multi-agent routing label ("general" / "billing" /
+    # "technical" / "account").  Nullable so existing rows are unaffected.
+    """
+    ALTER TABLE agent_metrics
+        ADD COLUMN IF NOT EXISTS routed_agent VARCHAR(50) DEFAULT 'general'
+    """,
+
     # =========================================================================
     # conversations — channel-specific threading / session key
     # =========================================================================
