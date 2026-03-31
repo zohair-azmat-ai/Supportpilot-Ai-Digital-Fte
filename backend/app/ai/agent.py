@@ -424,7 +424,7 @@ class SupportAgent:
 
     # Neutral clarification returned whenever the above guard fires
     _FIRST_CONTACT_NEUTRAL_REPLY: str = (
-        "Got it — can you tell me what exactly isn't working?"
+        "Happy to help! Can you tell me what's going on?"
     )
 
     @classmethod
