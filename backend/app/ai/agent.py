@@ -158,6 +158,29 @@ class SupportAgent:
             logger.warning("Context build failed (non-fatal): %s", exc)
 
         # ------------------------------------------------------------------
+        # Phase 1a.5 — Repeat-keyword safety net
+        # The context builder derives attempt counts from keyword overlap in
+        # prior turns.  When prior messages were very short, the overlap may
+        # be missed.  This safety net catches explicit repeat signals in the
+        # CURRENT message and bumps the count so strategy + escalation logic
+        # operate on accurate data.
+        # ------------------------------------------------------------------
+        if (
+            conv_context is not None
+            and not conv_context.is_first_contact
+            and self._detect_repeat_keywords(user_message)
+            and conv_context.previous_failed_attempts == 0
+        ):
+            conv_context.previous_failed_attempts = 1
+            conv_context.repeated_issue = True
+            conv_context.response_strategy = "second_attempt"
+            logger.info(
+                "Repeat keywords in message — bumped attempts to 1, strategy=second_attempt "
+                "| conversation=%s",
+                conversation_id,
+            )
+
+        # ------------------------------------------------------------------
         # Phase 1b — Decision engine: generates structured reply + metadata
         # ------------------------------------------------------------------
         try:
@@ -389,6 +412,27 @@ class SupportAgent:
             kb_articles_found=ctx.kb_articles_found,
             ticket_created=ctx.ticket_created,
         )
+
+    # ------------------------------------------------------------------
+    # Repeat-keyword detection (safety net for context builder misses)
+    # ------------------------------------------------------------------
+
+    # Explicit repeat-attempt signals that should always be caught even when
+    # the context builder's keyword-overlap scoring misses them.
+    _REPEAT_KEYWORDS: frozenset = frozenset({
+        "still not working", "still doesn't work", "still not",
+        "still can't", "still cannot", "tried again", "tried it again",
+        "same issue again", "again same issue", "again same problem",
+        "tried everything", "nothing works", "not working again",
+        "happening again", "still happening", "still broken",
+        "already tried", "tried that already", "did that already",
+    })
+
+    @classmethod
+    def _detect_repeat_keywords(cls, message: str) -> bool:
+        """Return True if the message contains explicit repeat-attempt signals."""
+        msg = message.lower()
+        return any(kw in msg for kw in cls._REPEAT_KEYWORDS)
 
     # ------------------------------------------------------------------
     # First-contact reply sanitizer

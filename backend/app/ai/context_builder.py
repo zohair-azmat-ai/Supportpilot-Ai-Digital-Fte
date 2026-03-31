@@ -123,6 +123,10 @@ class ConversationContext:
     # Formatted recent turns for explicit "Conversation History:" block.
     # Each entry: {"role": "User" | "Assistant", "content": str}
     recent_history: list = field(default_factory=list)
+    # Response strategy derived from attempt count — injected as an explicit
+    # LLM directive so the model knows which response pattern to apply.
+    # "first_attempt" | "second_attempt" | "third_attempt"
+    response_strategy: str = "first_attempt"
 
     def to_prompt_block(self) -> str:
         """Format as a concise context block for the LLM system message.
@@ -136,6 +140,31 @@ class ConversationContext:
             lines.append("Turn: 1 (first message in this session — do NOT escalate unless critical)")
         else:
             lines.append(f"Turn: {self.message_count_in_session + 1}")
+
+        # Explicit response strategy directive — tells the LLM exactly which
+        # pattern to apply so it does not repeat steps it already gave.
+        if not self.is_first_contact:
+            if self.response_strategy == "first_attempt":
+                lines.append(
+                    "RESPONSE STRATEGY: First attempt — give clear, actionable steps. "
+                    "End with one follow-up question. Max 80 words."
+                )
+            elif self.response_strategy == "second_attempt":
+                lines.append(
+                    "RESPONSE STRATEGY: Second attempt — the user already tried the steps you gave. "
+                    "DO NOT repeat the same steps. "
+                    "Acknowledge they tried, then ask ONE specific diagnostic question "
+                    "(e.g. 'What exactly happened when you tried?'). Max 60 words."
+                )
+            else:  # third_attempt
+                lines.append(
+                    "RESPONSE STRATEGY: Third attempt (repeated failure). "
+                    "DO NOT list any steps. "
+                    'Start with: "I can see you\'ve already tried this a couple of times — '
+                    'thanks for your patience." '
+                    "Then either offer a completely different approach OR escalate to a human. "
+                    "Max 50 words."
+                )
 
         if self.repeated_issue:
             attempts = self.previous_failed_attempts
@@ -321,6 +350,16 @@ class ConversationContextBuilder:
         if not ctx.is_first_contact and any(kw in msg for kw in _REPEATED_ISSUE_KEYWORDS):
             ctx.repeated_issue = True
             ctx.previous_failed_attempts = max(ctx.previous_failed_attempts, 1)
+
+        # --- Response strategy (derived from attempt count) ---
+        # Gives the LLM an explicit case directive rather than relying on it
+        # to infer strategy from loose signals.
+        if ctx.is_first_contact or ctx.previous_failed_attempts == 0:
+            ctx.response_strategy = "first_attempt"
+        elif ctx.previous_failed_attempts == 1:
+            ctx.response_strategy = "second_attempt"
+        else:
+            ctx.response_strategy = "third_attempt"
 
         # --- Prior escalation in this session (check AI messages) ---
         for m in conversation_history:

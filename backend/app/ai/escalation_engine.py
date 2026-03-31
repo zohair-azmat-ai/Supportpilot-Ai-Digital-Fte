@@ -270,13 +270,18 @@ class EscalationEngine:
         # ------------------------------------------------------------------
         if context is not None:
 
-            # Frustration signal → soft escalation
-            if context.user_frustrated:
+            # Frustration signal with at least one prior failed attempt → soft escalation.
+            # Frustration alone (turn 2 with no prior attempts) is not enough —
+            # the AI should first try a targeted question before escalating.
+            if context.user_frustrated and context.previous_failed_attempts >= 1:
                 reason = (
                     llm_decision.escalation_reason
-                    or "User appears frustrated and the issue remains unresolved."
+                    or "User is frustrated after repeated failed attempts."
                 )
-                logger.info("EscalationEngine: frustration signal triggered")
+                logger.info(
+                    "EscalationEngine: frustration + attempts=%d triggered",
+                    context.previous_failed_attempts,
+                )
                 return EscalationDecision(
                     escalate=True,
                     escalation_reason=reason,
@@ -284,8 +289,10 @@ class EscalationEngine:
                     escalation_cause="frustration",
                 )
 
-            # Repeated issue + at least one failed attempt → soft escalation
-            if context.repeated_issue and context.previous_failed_attempts >= 1:
+            # Repeated issue + two or more failed attempts → soft escalation.
+            # Threshold is 2 (not 1) so the AI gets one diagnostic turn before
+            # escalating — matching the three-case response strategy.
+            if context.repeated_issue and context.previous_failed_attempts >= 2:
                 reason = (
                     llm_decision.escalation_reason
                     or (
