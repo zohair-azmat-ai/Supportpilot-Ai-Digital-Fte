@@ -107,10 +107,13 @@ async def run_inbound_support_pipeline(
         details=user_msg_metadata,
     )
 
-    conv_with_msgs = await conv_repo.get_with_messages(active_conv.id)
+    # Fetch the last 10 messages at the DB level (efficient LIMIT query).
+    # This is the conversation memory window — enough context for the AI to
+    # detect repeat issues / frustration without loading unbounded history.
+    recent_msgs = await msg_repo.get_recent_messages(active_conv.id, limit=10)
     history = [
         {"sender_type": m.sender_type, "content": m.content}
-        for m in (conv_with_msgs.messages if conv_with_msgs else [])
+        for m in recent_msgs
     ]
 
     logger.info(

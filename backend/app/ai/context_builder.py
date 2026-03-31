@@ -14,6 +14,7 @@ signals derived from conversation history only.  The request never crashes.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from dataclasses import dataclass, field
@@ -119,6 +120,9 @@ class ConversationContext:
     # --- Content for prompt injection ---
     last_ai_reply: str = ""             # used to prevent verbatim repetition
     user_history_summary: str = ""      # formatted recent ticket/conv summary
+    # Formatted recent turns for explicit "Conversation History:" block.
+    # Each entry: {"role": "User" | "Assistant", "content": str}
+    recent_history: list = field(default_factory=list)
 
     def to_prompt_block(self) -> str:
         """Format as a concise context block for the LLM system message.
@@ -192,6 +196,18 @@ class ConversationContext:
 
             if self.user_history_summary:
                 lines.append(f"\nRecent support history:\n{self.user_history_summary}")
+
+        # Conversation History block — explicit, labelled memory for the LLM.
+        # Only shown on non-first-contact turns so first messages stay clean.
+        if self.recent_history and not self.is_first_contact:
+            turn_count = sum(1 for e in self.recent_history if e["role"] == "User")
+            lines.append(f"\nConversation History ({turn_count} prior turn(s)):")
+            for entry in self.recent_history:
+                # Truncate long messages to keep the block concise
+                content = entry["content"]
+                if len(content) > 200:
+                    content = content[:200] + "…"
+                lines.append(f"{entry['role']}: {content}")
 
         if self.last_ai_reply:
             # Truncate to keep prompt tight
@@ -319,6 +335,27 @@ class ConversationContextBuilder:
             if m.get("sender_type") in ("ai", "agent") and m.get("content"):
                 ctx.last_ai_reply = m["content"].strip()
                 break
+
+        # --- Recent history (last 5 exchanges = up to 10 messages) ---
+        # Formatted as [{role, content}] for explicit "Conversation History:"
+        # block in the system prompt so the LLM can clearly reference past turns.
+        history_entries: list[dict] = []
+        for m in conversation_history[-10:]:
+            sender = m.get("sender_type", "")
+            content = m.get("content", "").strip()
+            if not content:
+                continue
+            if sender == "user":
+                history_entries.append({"role": "User", "content": content})
+            elif sender in ("ai", "agent"):
+                # Unwrap legacy JSON-wrapped AI messages
+                try:
+                    parsed = json.loads(content)
+                    content = parsed.get("reply") or parsed.get("response") or content
+                except Exception:  # noqa: BLE001
+                    pass
+                history_entries.append({"role": "Assistant", "content": content})
+        ctx.recent_history = history_entries
 
     # ------------------------------------------------------------------
     # Cross-session DB lookup

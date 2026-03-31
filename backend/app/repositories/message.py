@@ -24,6 +24,25 @@ class MessageRepository(BaseRepository[Message]):
         )
         return list(result.scalars().all())
 
+    async def get_recent_messages(
+        self,
+        conversation_id: str,
+        limit: int = 10,
+    ) -> List[Message]:
+        """Return the most recent N messages ordered chronologically (oldest-first).
+
+        Uses a DB-level LIMIT so only the required rows are transferred —
+        more efficient than loading the full conversation and slicing in Python.
+        """
+        result = await self.db.execute(
+            select(Message)
+            .where(Message.conversation_id == conversation_id)
+            .order_by(Message.created_at.desc())
+            .limit(limit)
+        )
+        # Reverse so messages are in chronological order for the AI prompt
+        return list(reversed(result.scalars().all()))
+
     async def create_message(
         self,
         conversation_id: str,
