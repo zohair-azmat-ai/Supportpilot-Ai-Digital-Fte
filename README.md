@@ -25,17 +25,18 @@ pinned: false
 [![OpenAI](https://img.shields.io/badge/OpenAI_GPT--4o-412991?style=for-the-badge&logo=openai&logoColor=white)](https://platform.openai.com)
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://typescriptlang.org)
 
-<!-- Row 2 — Status & channels -->
-[![Status: Live](https://img.shields.io/badge/Status-Live-22c55e?style=for-the-badge&logo=vercel&logoColor=white)](https://supportpilot-ai-digital-fte.vercel.app)
-[![License: MIT](https://img.shields.io/badge/License-MIT-f59e0b?style=for-the-badge)](LICENSE)
+<!-- Row 2 — Integrations -->
 [![WhatsApp](https://img.shields.io/badge/WhatsApp-Integrated-25D366?style=for-the-badge&logo=whatsapp&logoColor=white)](#-multi-channel-design)
 [![Email](https://img.shields.io/badge/Email-Integrated-0ea5e9?style=for-the-badge&logo=gmail&logoColor=white)](#-multi-channel-design)
+[![Multi-Channel](https://img.shields.io/badge/Multi--Channel-Web_%7C_WA_%7C_Email-f59e0b?style=for-the-badge)](#-multi-channel-design)
+[![REST API](https://img.shields.io/badge/REST_API-Full_Docs-6366f1?style=for-the-badge&logo=swagger&logoColor=white)](https://zohairazmat-supportpilot-ai-fte.hf.space/docs)
+[![Status: Live](https://img.shields.io/badge/Status-Live-22c55e?style=for-the-badge&logo=vercel&logoColor=white)](https://supportpilot-ai-digital-fte.vercel.app)
 
 <!-- Row 3 — AI & platform features -->
-[![LLM Powered](https://img.shields.io/badge/LLM_Powered-GPT--4o_mini-6d28d9?style=flat-square&logo=openai&logoColor=white)](#-features)
+[![GPT-4o-mini](https://img.shields.io/badge/GPT--4o--mini-Powered-6d28d9?style=flat-square&logo=openai&logoColor=white)](#-features)
 [![Memory & RAG](https://img.shields.io/badge/Memory_%26_RAG-Live-7c3aed?style=flat-square)](#-features)
 [![Escalation Logic](https://img.shields.io/badge/Escalation-Smart_Logic-ef4444?style=flat-square)](#-features)
-[![Multi-Channel](https://img.shields.io/badge/Multi--Channel-Web_%7C_WhatsApp_%7C_Email-f59e0b?style=flat-square)](#-multi-channel-design)
+[![Analytics](https://img.shields.io/badge/Analytics-Dashboard-3b82f6?style=flat-square)](#-features)
 [![Production Ready](https://img.shields.io/badge/Architecture-Production_Style-1e293b?style=flat-square)](#-architecture)
 
 <br/>
@@ -412,6 +413,16 @@ supportpilot-ai/                        ← Single production monorepo
 │       │   ├── tools.py                # Tool definitions + ToolExecutor
 │       │   ├── service.py              # AIResponse dataclass + fallback logic
 │       │   └── client.py               # AsyncOpenAI singleton
+│       ├── agents/                     # Phase 6 — multi-agent orchestration
+│       │   ├── router_agent.py         # Intent/category → specialist dispatcher
+│       │   └── specialist_agents/
+│       │       ├── billing_agent.py    # Payment, subscription, invoice queries
+│       │       ├── technical_agent.py  # Crashes, performance, data issues
+│       │       └── account_agent.py    # Login, password reset, 2FA, locked
+│       ├── billing/                    # Phase 6 — SaaS monetization
+│       │   ├── plans.py                # Free / Pro / Team plan definitions
+│       │   ├── usage_meter.py          # Per-user message/ticket counter
+│       │   └── limits.py               # Hard + soft limit enforcement
 │       └── api/v1/routes/              # HTTP route handlers
 │
 ├── workers/                            # Kafka consumer workers
@@ -634,7 +645,7 @@ All endpoints are prefixed with `/api/v1`. &nbsp; Interactive docs → [`/docs`]
 | **Phase 3 — Multi-channel** | WhatsApp + Email adapters · unified customer identity · email thread continuity · channel analytics | ✅ Done |
 | **Phase 4 — Advanced AI + Observability** | Real LLM decision engine · AI categorization (category/priority/urgency) · event lifecycle logging · escalation loop fixes · build status indicator · email test mode · KB pre-fetch | ✅ Done |
 | **Phase 5 — Memory + Retrieval** | Conversation memory layer · similar-issue retrieval · basic message-level RAG implemented · deeper context injection | ✅ Done |
-| **Phase 6 — Orchestration + SaaS** | Multi-agent routing (triage → specialist agents) · full Kafka pipeline · WebSocket token streaming · KEDA autoscaling · Stripe billing · multi-tenant workspaces · usage metering | 🏢 Roadmap |
+| **Phase 6 — Orchestration + SaaS** | Multi-agent routing (triage → specialist agents) · full Kafka pipeline · WebSocket token streaming · KEDA autoscaling · Stripe billing · multi-tenant workspaces · usage metering | 🚧 Started |
 
 The event bus and worker system are already implemented — switching to Kafka requires one env var. See [docs/specs/scaling-architecture.md](docs/specs/scaling-architecture.md).
 
@@ -646,14 +657,15 @@ The event bus and worker system are already implemented — switching to Kafka r
 - [x] **Similar-issue retrieval** — Keyword-overlap ticket detection and message-level RAG returning (user issue, assistant solution) pairs injected into the LLM prompt — live
 - [x] **Intent memory** — `conversation.last_intent` persisted per turn; context builder detects same-topic repetition and routes to continuation flow instead of restarting — live
 - [ ] **Advanced RAG knowledge base** — Company docs embedded and retrieved semantically at query time (pgvector / Pinecone / Qdrant); replaces current keyword-ILIKE search with dense vector similarity
-- [ ] **Multi-agent orchestration** — Triage agent + specialist agents (billing, technical, account) with a router deciding dispatch
+- [x] **Multi-agent routing base** — `RouterAgent` dispatches by intent/category to `BillingAgent`, `TechnicalAgent`, `AccountAgent` — `agents/` layer created, pipeline wiring is next
+- [ ] **Multi-agent orchestration (full)** — LLM-specialised agents with shared context, cross-agent handoff, and audit trail
 - [ ] **WebSocket streaming** — Real-time GPT token streaming to the chat UI
 - [ ] **Human handoff UI** — Admin live-chat takeover for escalated conversations with full context hand-off
 - [ ] **Deeper observability** — Resolution time trends, CSAT scores, per-channel volume heatmaps, SLA breach alerts
 - [ ] **SLA automation** — Auto-escalation when tickets breach time or priority thresholds
-- [ ] **SaaS monetization** — Subscription plans (Free / Pro / Team), usage limits, and billing integration; workspace-level feature gating
+- [x] **SaaS monetization base** — Plan definitions (Free / Pro / Team) with monthly message/ticket limits, soft-limit warnings, and hard-limit blocking — `billing/plans.py`, `billing/limits.py`, `billing/usage_meter.py` live
 - [ ] **Stripe billing integration** — Checkout, subscription lifecycle, plan upgrades / downgrades, and webhook-driven entitlement updates
-- [ ] **Usage metering** — Per-workspace message volume, support throughput, and AI cost tracking with configurable hard/soft limits
+- [ ] **Usage metering (DB-backed)** — Persistent per-workspace message volume with monthly reset job; current in-memory meter is the Phase 6 stub
 - [ ] **Multi-tenant workspaces** — Full workspace isolation for B2B SaaS usage; per-tenant model config, KB, and escalation rules
 - [ ] **Fine-tuned model** — Domain-specific fine-tuning on resolved ticket history for lower latency and higher accuracy
 
