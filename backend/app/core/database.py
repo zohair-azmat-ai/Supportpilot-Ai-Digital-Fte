@@ -587,6 +587,32 @@ _PATCHES = [
         ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()
     """,
 
+    # external_id — unique external reference UUID for each customer.
+    # Added as nullable first so existing rows are not rejected, then
+    # backfilled with a generated value using pg's md5+random (works on
+    # all Postgres versions without requiring the pgcrypto extension).
+    """
+    ALTER TABLE customers
+        ADD COLUMN IF NOT EXISTS external_id VARCHAR(255)
+    """,
+    """
+    UPDATE customers
+    SET external_id = md5(random()::text || clock_timestamp()::text)
+    WHERE external_id IS NULL OR external_id = ''
+    """,
+
+    # account_tier — customer subscription tier; DEFAULT 'free' backfills.
+    """
+    ALTER TABLE customers
+        ADD COLUMN IF NOT EXISTS account_tier VARCHAR(50) DEFAULT 'free'
+    """,
+
+    # is_vip — VIP customer flag; DEFAULT false backfills existing rows.
+    """
+    ALTER TABLE customers
+        ADD COLUMN IF NOT EXISTS is_vip BOOLEAN DEFAULT false
+    """,
+
     # =========================================================================
     # customer_identifiers — columns added after initial table creation
     # =========================================================================
