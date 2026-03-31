@@ -18,29 +18,24 @@ pinned: false
 
 <br/>
 
-<!-- Tech stack -->
+<!-- Row 1 — Tech stack -->
 [![Next.js](https://img.shields.io/badge/Next.js_14-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)](https://nextjs.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://postgresql.org)
 [![OpenAI](https://img.shields.io/badge/OpenAI_GPT--4o-412991?style=for-the-badge&logo=openai&logoColor=white)](https://platform.openai.com)
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://typescriptlang.org)
 
-<!-- Status & license -->
+<!-- Row 2 — Status & channels -->
 [![Status: Live](https://img.shields.io/badge/Status-Live-22c55e?style=for-the-badge&logo=vercel&logoColor=white)](https://supportpilot-ai-digital-fte.vercel.app)
 [![License: MIT](https://img.shields.io/badge/License-MIT-f59e0b?style=for-the-badge)](LICENSE)
+[![WhatsApp](https://img.shields.io/badge/WhatsApp-Integrated-25D366?style=for-the-badge&logo=whatsapp&logoColor=white)](#-multi-channel-design)
+[![Email](https://img.shields.io/badge/Email-Integrated-0ea5e9?style=for-the-badge&logo=gmail&logoColor=white)](#-multi-channel-design)
 
-<br/>
-
-<!-- Channels & AI -->
+<!-- Row 3 — AI & platform features -->
 [![LLM Powered](https://img.shields.io/badge/LLM_Powered-GPT--4o_mini-6d28d9?style=flat-square&logo=openai&logoColor=white)](#-features)
-[![WhatsApp](https://img.shields.io/badge/WhatsApp-Integrated-25D366?style=flat-square&logo=whatsapp&logoColor=white)](#-multi-channel-design)
-[![Email](https://img.shields.io/badge/Email-Integrated-0ea5e9?style=flat-square&logo=gmail&logoColor=white)](#-multi-channel-design)
-[![Multi-Channel](https://img.shields.io/badge/Multi--Channel-Web_%7C_WhatsApp_%7C_Email-f59e0b?style=flat-square)](#-multi-channel-design)
-
-<!-- Features & architecture -->
-[![Event Logging](https://img.shields.io/badge/Event_Logging-Enabled-10b981?style=flat-square)](#-features)
-[![Analytics](https://img.shields.io/badge/Analytics-Dashboard-3b82f6?style=flat-square)](#-features)
+[![Memory & RAG](https://img.shields.io/badge/Memory_%26_RAG-Live-7c3aed?style=flat-square)](#-features)
 [![Escalation Logic](https://img.shields.io/badge/Escalation-Smart_Logic-ef4444?style=flat-square)](#-features)
+[![Multi-Channel](https://img.shields.io/badge/Multi--Channel-Web_%7C_WhatsApp_%7C_Email-f59e0b?style=flat-square)](#-multi-channel-design)
 [![Production Ready](https://img.shields.io/badge/Architecture-Production_Style-1e293b?style=flat-square)](#-architecture)
 
 <br/>
@@ -92,6 +87,10 @@ Admin portal  →  admin@supportpilot.ai  /  Admin123!
 | **Event Logging** | Structured lifecycle events: `response_generated`, `escalation_triggered`, `ticket_created` — all persisted and queryable via the metrics API |
 | **Escalation Loop Fixes** | Calm follow-up suppression (`ok`, `thanks`, `got it`), duplicate escalation prevention, first-message guard, fresh-issue-cycle reset for resumed WhatsApp threads |
 | **Multi-Channel Architecture** | Unified `InboundMessage` adapter pattern across Web, WhatsApp, and Email — same AI pipeline, same ticket/conversation store, same identity resolution |
+| **Conversation Memory Layer** | Context builder loads last 10 messages, failed-attempt count, and open-ticket state before every LLM call — replies are continuation-aware, not fresh restarts |
+| **3-Case Response Strategy** | Repeat-attempt tracking routes the LLM to three explicit strategies: first attempt (full explain), second attempt (try a different approach), third attempt (offer human handoff) |
+| **Intent Memory** | `conversation.last_intent` persisted per turn; same-topic repetition detected cross-turn and flagged as `same_intent_repeat` — LLM prompted to continue rather than restart |
+| **Message-Level RAG** | `RAGRepository` retrieves (user issue, assistant solution) pairs from past conversations via keyword-ILIKE search — top matches injected into the LLM system prompt |
 
 ---
 
@@ -165,7 +164,7 @@ This is not a tutorial project or a hackathon demo. It is a **production-style m
 | **Smart Escalation** | Frustration-keyword detection, repeat-issue counting, first-message guard, fresh-issue-cycle reset — eliminates false escalation loops |
 | **Calm Follow-up Suppression** | `ok`, `thanks`, `got it` and similar phrases bypass the full pipeline and return a brief polite closure — no repeated escalation |
 | **Event Lifecycle Logging** | Structured events: `response_generated`, `escalation_triggered`, `ticket_created` — all persisted and queryable |
-| **Conversation Memory** | Context builder surfaces repeated-issue signals, failed-attempt counts, and open-ticket state before every LLM call |
+| **Conversation Memory** | Context builder injects last-10-message history, failed-attempt count, intent memory, same-intent repeat signal, and RAG pairs before every LLM call — replies never restart from zero |
 | **KB Pre-fetch** | Relevant knowledge-base articles are injected into the LLM prompt before reply generation — answers reference real help content |
 | **Multi-Channel** | Web ✅ · WhatsApp ✅ (Twilio) · Email ✅ (SMTP / test mode) — same AI pipeline for all three |
 | **Event-Driven Bus** | InMemoryEventBus for dev · KafkaEventBus for prod — one env var to switch |
@@ -239,7 +238,7 @@ flowchart TD
 
     subgraph AILayer["  🤖 AI Layer — GPT-4o-mini  "]
         direction TB
-        CtxBuilder["🔍 Context Builder\nrepeated issue · failed attempts · open ticket · cross-session"]
+        CtxBuilder["🔍 Context Builder\nrepeated issue · failed attempts · intent memory · RAG pairs"]
         KBFetch["📚 KB Pre-fetch\nrelevant articles injected before LLM call"]
         DecisionEng["🧠 Decision Engine\nLLM structured reply · category · priority · urgency · escalate"]
         EscEngine["⚠️ Escalation Engine\nfrustration detection · first-message guard\ncalm follow-up suppression · issue-cycle reset"]
@@ -295,7 +294,7 @@ flowchart TD
 | **Channels** | Three active inbound adapters — Web (REST), WhatsApp (Twilio webhook), Email (SMTP / test mode) — all normalised to `InboundMessage` before the pipeline |
 | **Routes** | HTTP handling — auth, validation, response serialisation, channel dispatch |
 | **Support Pipeline** | Orchestrates the full turn: identity resolution, conversation resume by `thread_id`, user message store, AI agent call, AI reply store, event logging, metrics |
-| **Context Builder** | Pre-LLM: loads repeated-issue signals, failed-attempt counts, and open-ticket state from conversation history and cross-session DB records |
+| **Context Builder** | Pre-LLM: loads last-10-message history, failed-attempt count, intent memory (`last_intent`), same-intent repeat signal, and RAG (user issue + solution) pairs — all injected into the system prompt |
 | **KB Pre-fetch** | Retrieves the top-3 relevant knowledge-base articles before the LLM call and injects them as a system message — reply generation references real help content |
 | **Decision Engine** | Calls GPT-4o-mini in JSON mode; validates and returns a `SupportDecision` with reply, `category`, `priority`, `urgency`, `intent`, `confidence`, and `escalate` flag |
 | **Escalation Engine** | Post-LLM deterministic layer — frustration-keyword detection, first-message guard, calm follow-up suppression, issue-cycle reset, hard-rule escalation (legal/security) |
@@ -401,12 +400,15 @@ supportpilot-ai/                        ← Single production monorepo
 │       ├── core/                       # config · database · security · deps
 │       ├── models/                     # SQLAlchemy ORM models (8 tables)
 │       ├── schemas/                    # Pydantic v2 schemas
-│       ├── repositories/               # Data access — one class per entity
+│       ├── repositories/               # Data access — one class per entity + RAGRepository
 │       ├── services/                   # Business logic — auth · chat · tickets
 │       ├── channels/                   # Adapters — base · web · email · whatsapp
 │       ├── events/                     # Event bus — InMemory · Kafka · topics
 │       ├── ai/
-│       │   ├── agent.py                # SupportAgent — 5-tool loop
+│       │   ├── agent.py                # SupportAgent — 5-tool loop + repeat-keyword detection
+│       │   ├── context_builder.py      # ConversationContext — memory, RAG, intent, strategy
+│       │   ├── decision_engine.py      # GPT-4o-mini structured reply + triage
+│       │   ├── escalation_engine.py    # Deterministic post-LLM escalation rules
 │       │   ├── tools.py                # Tool definitions + ToolExecutor
 │       │   ├── service.py              # AIResponse dataclass + fallback logic
 │       │   └── client.py               # AsyncOpenAI singleton
@@ -632,7 +634,7 @@ All endpoints are prefixed with `/api/v1`. &nbsp; Interactive docs → [`/docs`]
 | **Phase 3 — Multi-channel** | WhatsApp + Email adapters · unified customer identity · email thread continuity · channel analytics | ✅ Done |
 | **Phase 4 — Advanced AI + Observability** | Real LLM decision engine · AI categorization (category/priority/urgency) · event lifecycle logging · escalation loop fixes · build status indicator · email test mode · KB pre-fetch | ✅ Done |
 | **Phase 5 — Memory + Retrieval** | Conversation memory layer · similar-issue retrieval · basic message-level RAG implemented · deeper context injection | ✅ Done |
-| **Phase 6 — Orchestration + Scale** | Multi-agent reasoning · full Kafka pipeline · WebSocket streaming · Kubernetes deployment with KEDA autoscaling | 🏢 Roadmap |
+| **Phase 6 — Orchestration + SaaS** | Multi-agent routing (triage → specialist agents) · full Kafka pipeline · WebSocket token streaming · KEDA autoscaling · Stripe billing · multi-tenant workspaces · usage metering | 🏢 Roadmap |
 
 The event bus and worker system are already implemented — switching to Kafka requires one env var. See [docs/specs/scaling-architecture.md](docs/specs/scaling-architecture.md).
 
