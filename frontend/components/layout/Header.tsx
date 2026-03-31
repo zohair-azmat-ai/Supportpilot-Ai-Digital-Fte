@@ -14,11 +14,16 @@ function useBuildStatus(): BuildStatus {
   useEffect(() => {
     const check = async () => {
       try {
-        const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'
-        const res = await fetch(`${base}/health/build-status`, { cache: 'no-store' })
+        // NEXT_PUBLIC_API_URL points to the /api/v1 prefix (e.g. https://host/api/v1).
+        // The /health endpoint lives at the root — not under /api/v1 — so strip
+        // the suffix before appending it.
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'
+        const rootUrl = apiBase.replace(/\/api\/v1\/?$/, '').replace(/\/$/, '')
+        const res = await fetch(`${rootUrl}/health`, { cache: 'no-store' })
+        // Treat any 2xx response as live — no strict body parsing needed.
         setStatus(res.ok ? 'live' : 'offline')
       } catch {
-        setStatus('building')
+        setStatus('offline')
       }
     }
 
