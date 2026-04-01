@@ -85,6 +85,11 @@ export interface EscalationCauseCount {
   count: number
 }
 
+export interface RoutedAgentCount {
+  agent: string
+  count: number
+}
+
 export interface MetricsOverview {
   total_interactions: number
   avg_confidence: number
@@ -100,6 +105,7 @@ export interface MetricsOverview {
   escalation_cause_breakdown: EscalationCauseCount[]
   similar_issue_count: number
   similar_issue_rate: number
+  routing_breakdown: RoutedAgentCount[]
 }
 
 export interface ChannelMetric {

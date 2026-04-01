@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, select, text
 
 from app.models.agent_metrics import AgentMetrics
 from app.repositories.base import BaseRepository
@@ -148,6 +148,8 @@ class AgentMetricsRepository(BaseRepository[AgentMetrics]):
             for r in cause_result
         ]
 
+        routing_breakdown = await self.get_routing_stats()
+
         return {
             "total_interactions": total,
             "avg_confidence": round(float(row["avg_confidence"] or 0.0), 4),
@@ -163,7 +165,57 @@ class AgentMetricsRepository(BaseRepository[AgentMetrics]):
             "escalation_cause_breakdown": escalation_cause_breakdown,
             "similar_issue_count": similar_issue_count,
             "similar_issue_rate": round(similar_issue_count / total, 4) if total else 0.0,
+            "routing_breakdown": routing_breakdown,
         }
+
+    # ------------------------------------------------------------------
+    # Specialist routing breakdown
+    # ------------------------------------------------------------------
+
+    async def get_routing_stats(self) -> List[Dict[str, Any]]:
+        """Return per-specialist-agent interaction counts, ordered by volume."""
+        result = await self.db.execute(
+            select(
+                AgentMetrics.routed_agent,
+                func.count(AgentMetrics.id).label("cnt"),
+            )
+            .where(AgentMetrics.routed_agent.isnot(None))
+            .group_by(AgentMetrics.routed_agent)
+            .order_by(func.count(AgentMetrics.id).desc())
+        )
+        return [
+            {"agent": r.routed_agent, "count": r.cnt}
+            for r in result
+        ]
+
+    async def get_per_conversation_routing(self, limit: int = 200) -> List[Dict[str, Any]]:
+        """Return the most recent routed_agent for each conversation (newest first).
+
+        Uses a subquery to pick the latest metric row per conversation.
+        """
+        subq = (
+            select(
+                AgentMetrics.conversation_id,
+                func.max(AgentMetrics.created_at).label("max_ts"),
+            )
+            .group_by(AgentMetrics.conversation_id)
+            .subquery()
+        )
+        result = await self.db.execute(
+            select(AgentMetrics.conversation_id, AgentMetrics.routed_agent)
+            .join(
+                subq,
+                (AgentMetrics.conversation_id == subq.c.conversation_id)
+                & (AgentMetrics.created_at == subq.c.max_ts),
+            )
+            .where(AgentMetrics.routed_agent.isnot(None))
+            .order_by(AgentMetrics.created_at.desc())
+            .limit(limit)
+        )
+        return [
+            {"conversation_id": r.conversation_id, "routed_agent": r.routed_agent}
+            for r in result
+        ]
 
     # ------------------------------------------------------------------
     # Per-channel breakdown

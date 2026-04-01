@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   BarChart3,
   Brain,
+  Cpu,
   Frown,
   RefreshCw,
   Smile,
@@ -14,7 +15,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { metricsApi } from '../../../../lib/api'
-import { ChannelMetricsResponse, MetricsOverview } from '../../../../types'
+import { ChannelMetricsResponse, MetricsOverview, RoutedAgentCount } from '../../../../types'
 import { StatsCard } from '../../../../components/dashboard/StatsCard'
 import { Card } from '../../../../components/ui/Card'
 import { Button } from '../../../../components/ui/Button'
@@ -49,6 +50,87 @@ function ChannelBars({
         </div>
       ))}
     </div>
+  )
+}
+
+// ── Specialist routing widget ────────────────────────────────────────────────
+
+const AGENT_META: Record<string, { label: string; color: string; bar: string; dot: string }> = {
+  billing:   { label: 'Billing',   color: 'text-indigo-300',  bar: 'bg-indigo-500',  dot: 'bg-indigo-400' },
+  technical: { label: 'Technical', color: 'text-amber-300',   bar: 'bg-amber-500',   dot: 'bg-amber-400' },
+  account:   { label: 'Account',   color: 'text-purple-300',  bar: 'bg-purple-500',  dot: 'bg-purple-400' },
+  general:   { label: 'General',   color: 'text-slate-400',   bar: 'bg-slate-500',   dot: 'bg-slate-500' },
+}
+
+function agentMeta(agent: string) {
+  return AGENT_META[agent] ?? { label: agent, color: 'text-slate-400', bar: 'bg-slate-600', dot: 'bg-slate-600' }
+}
+
+function SpecialistRoutingCard({ breakdown }: { breakdown: RoutedAgentCount[] }) {
+  const total = breakdown.reduce((s, r) => s + r.count, 0)
+  const top = breakdown[0]
+
+  return (
+    <Card
+      title="Specialist Routing"
+      description="Which Phase 6 agent handled each AI interaction"
+    >
+      {breakdown.length === 0 ? (
+        <p className="text-sm text-slate-500">No specialist routing data recorded yet.</p>
+      ) : (
+        <div className="space-y-4">
+          {/* Top agent highlight */}
+          {top && (
+            <div className="flex items-center gap-3 rounded-xl border border-border bg-background px-4 py-3">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-background-elevated border border-border">
+                <Cpu size={15} className={agentMeta(top.agent).color} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-slate-500 uppercase tracking-wider">Top agent</p>
+                <p className={`text-sm font-semibold capitalize ${agentMeta(top.agent).color}`}>
+                  {agentMeta(top.agent).label}
+                </p>
+              </div>
+              <div className="text-right shrink-0">
+                <p className="text-sm font-semibold text-slate-100">{top.count}</p>
+                <p className="text-xs text-slate-500">
+                  {total > 0 ? `${Math.round((top.count / total) * 100)}%` : '—'}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* All agents */}
+          <div className="space-y-3">
+            {breakdown.map((r) => {
+              const meta = agentMeta(r.agent)
+              const pct = total > 0 ? (r.count / total) * 100 : 0
+              return (
+                <div key={r.agent} className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className={`h-2 w-2 rounded-full ${meta.dot}`} />
+                      <span className={`text-xs font-medium capitalize ${meta.color}`}>
+                        {meta.label}
+                      </span>
+                    </div>
+                    <span className="text-xs text-slate-400 tabular-nums">
+                      {r.count} · {Math.round(pct)}%
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-background">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${meta.bar}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </Card>
   )
 }
 
@@ -264,6 +346,13 @@ export default function AdminAnalyticsPage() {
           )}
         </Card>
       </div>
+
+      {/* Specialist Routing */}
+      {(overview.routing_breakdown?.length > 0) && (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <SpecialistRoutingCard breakdown={overview.routing_breakdown} />
+        </div>
+      )}
 
       {/* Sentiment + Escalation Cause */}
       {(overview.sentiment_breakdown?.length > 0 || overview.escalation_cause_breakdown?.length > 0) && (

@@ -24,6 +24,7 @@ from app.schemas.metrics import (
     EscalationsResponse,
     EventsOverviewResponse,
     MetricsOverviewResponse,
+    RoutingMapResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -75,6 +76,27 @@ async def get_channel_metrics(
     repo = AgentMetricsRepository(db)
     data = await repo.get_channel_stats()
     return ChannelMetricsResponse(**data)
+
+
+@router.get(
+    "/routing",
+    response_model=RoutingMapResponse,
+    summary="Latest specialist agent per recent conversation",
+)
+async def get_routing_map(
+    limit: int = 200,
+    db: AsyncSession = Depends(get_db),
+    _: object = Depends(get_current_admin_user),
+) -> RoutingMapResponse:
+    """Return the most recently recorded routed_agent for each conversation.
+
+    Used by the admin conversations table to show which specialist handled
+    the last turn in each conversation. Capped at 200 conversations.
+    """
+    limit = min(limit, 500)
+    repo = AgentMetricsRepository(db)
+    data = await repo.get_per_conversation_routing(limit=limit)
+    return RoutingMapResponse(routing=data)
 
 
 @router.get(

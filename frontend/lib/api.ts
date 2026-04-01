@@ -261,6 +261,11 @@ export const metricsApi = {
     const res = await api.get('/metrics/channels')
     return res.data
   },
+
+  getRouting: async (): Promise<{ routing: { conversation_id: string; routed_agent: string }[] }> => {
+    const res = await api.get('/metrics/routing')
+    return res.data
+  },
 }
 
 export const billingApi = {

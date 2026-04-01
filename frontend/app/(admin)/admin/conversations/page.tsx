@@ -2,8 +2,8 @@
 
 import React, { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
-import { RefreshCw, MessageCircle, ExternalLink, AlertTriangle, Layers3 } from 'lucide-react'
-import { adminApi } from '../../../../lib/api'
+import { RefreshCw, MessageCircle, ExternalLink, AlertTriangle, Layers3, Cpu } from 'lucide-react'
+import { adminApi, metricsApi } from '../../../../lib/api'
 import { Conversation, ConversationStatus, Channel } from '../../../../types'
 import { ConversationStatusBadge, ChannelBadge, EscalationFlag } from '../../../../components/ui/Badge'
 import { Button } from '../../../../components/ui/Button'
@@ -26,8 +26,31 @@ const CHANNEL_FILTERS: { label: string; value: Channel | 'all' }[] = [
   { label: 'WhatsApp', value: 'whatsapp' },
 ]
 
+// ── Routing badge ─────────────────────────────────────────────────────────────
+
+const AGENT_BADGE: Record<string, { label: string; cls: string }> = {
+  billing:   { label: 'Billing',   cls: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/25' },
+  technical: { label: 'Technical', cls: 'bg-amber-500/15  text-amber-300  border-amber-500/25' },
+  account:   { label: 'Account',   cls: 'bg-purple-500/15 text-purple-300 border-purple-500/25' },
+  general:   { label: 'General',   cls: 'bg-slate-700/40  text-slate-400  border-slate-700/40' },
+}
+
+function RoutedAgentBadge({ agent }: { agent: string | undefined }) {
+  if (!agent) return <span className="text-slate-600 text-xs">—</span>
+  const meta = AGENT_BADGE[agent] ?? { label: agent, cls: 'bg-slate-700/40 text-slate-400 border-slate-700/40' }
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${meta.cls}`}>
+      <Cpu size={9} />
+      {meta.label}
+    </span>
+  )
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
 export default function AdminConversationsPage() {
   const [conversations, setConversations] = useState<Conversation[]>([])
+  const [routingMap, setRoutingMap] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<ConversationStatus | 'all'>('all')
@@ -45,6 +68,15 @@ export default function AdminConversationsPage() {
     } finally {
       setLoading(false)
     }
+
+    // Routing map is non-blocking — a failure won't break the page
+    metricsApi.getRouting().then(({ routing }) => {
+      const map: Record<string, string> = {}
+      routing.forEach(({ conversation_id, routed_agent }) => {
+        map[conversation_id] = routed_agent
+      })
+      setRoutingMap(map)
+    }).catch(() => {/* non-fatal */})
   }, [])
 
   useEffect(() => {
@@ -163,7 +195,7 @@ export default function AdminConversationsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-background-elevated/50">
-                {['ID', 'Subject', 'User', 'Channel', 'Status', 'Created', 'Actions'].map((h) => (
+                {['ID', 'Subject', 'User', 'Channel', 'Agent', 'Status', 'Created', 'Actions'].map((h) => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     {h}
                   </th>
@@ -189,6 +221,9 @@ export default function AdminConversationsPage() {
                   </td>
                   <td className="px-4 py-3">
                     <ChannelBadge channel={conv.channel} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <RoutedAgentBadge agent={routingMap[conv.id]} />
                   </td>
                   <td className="px-4 py-3">
                     <ConversationStatusBadge status={conv.status} />

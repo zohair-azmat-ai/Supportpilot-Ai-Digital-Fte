@@ -27,6 +27,21 @@ class EscalationCauseCount(BaseModel):
     count: int
 
 
+class RoutedAgentCount(BaseModel):
+    agent: str
+    count: int
+
+
+class ConversationAgent(BaseModel):
+    conversation_id: str
+    routed_agent: str
+
+
+class RoutingMapResponse(BaseModel):
+    """Latest routed agent per recent conversation."""
+    routing: List[ConversationAgent]
+
+
 class MetricsOverviewResponse(BaseModel):
     """Aggregate platform-wide AI performance metrics."""
     total_interactions: int
@@ -43,6 +58,7 @@ class MetricsOverviewResponse(BaseModel):
     escalation_cause_breakdown: List[EscalationCauseCount] = []
     similar_issue_count: int = 0
     similar_issue_rate: float = 0.0
+    routing_breakdown: List[RoutedAgentCount] = []
 
 
 class ChannelMetric(BaseModel):
