@@ -38,6 +38,7 @@ async def send_message(
         conversation_id=conversation_id,
         user_id=current_user.id,
         content=data.content,
+        plan_tier=getattr(current_user, "plan_tier", "free") or "free",
     )
     return MessagePairResponse(
         user_message=MessageResponse.model_validate(user_msg),
@@ -78,6 +79,7 @@ async def stream_message(
                 conversation_id=conversation_id,
                 user_id=current_user.id,
                 content=data.content,
+                plan_tier=getattr(current_user, "plan_tier", "free") or "free",
             )
 
             # Confirm the stored user message to the client

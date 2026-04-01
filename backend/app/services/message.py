@@ -27,6 +27,7 @@ class MessageService:
         conversation_id: str,
         user_id: str,
         content: str,
+        plan_tier: str = "free",
     ) -> Tuple[Message, Message]:
         """Store a user message, run the AI agent, and store the reply.
 
@@ -39,6 +40,7 @@ class MessageService:
             conversation_id: Target conversation ID.
             user_id: ID of the sending user.
             content: User's message text.
+            plan_tier: The user's current billing tier for limit enforcement.
 
         Returns:
             Tuple of (user_message, ai_message).
@@ -80,6 +82,33 @@ class MessageService:
             channel=getattr(conversation, "channel", "web"),
         )
 
+        # ── Billing enforcement ────────────────────────────────────────────────
+        from app.billing.limits import check_limits
+        from app.billing.usage_meter import usage_meter as _meter
+
+        limit_result = await check_limits(
+            user_id=user_id,
+            plan_tier=plan_tier,
+            action="message",
+            db=db,
+        )
+
+        if limit_result.hard_blocked:
+            logger.info(
+                "[message_service:blocked] user=%s plan=%s messages=%d/%d",
+                user_id, plan_tier, limit_result.current_count, limit_result.limit,
+            )
+            blocked_msg = await msg_repo.create_message(
+                conversation_id=conversation_id,
+                sender_type="ai",
+                content=limit_result.message,
+                intent="billing_limit",
+            )
+            return user_message, blocked_msg
+
+        # Record usage now that the request will be processed
+        await _meter.record_message(user_id)
+
         # 2. Build conversation history (messages before this one)
         history = [
             {"sender_type": m.sender_type, "content": m.content}
@@ -97,11 +126,20 @@ class MessageService:
         )
         response_ms = (time.monotonic() - t0) * 1000
 
+        # Soft-limit warning: append a note to the AI response
+        response_text = ai_result.response
+        if limit_result.soft_warning:
+            response_text = (
+                f"{response_text}\n\n"
+                f"---\n"
+                f"_Note: {limit_result.message}_"
+            )
+
         # 4. Persist AI response with full AI signals
         ai_message = await msg_repo.create_message(
             conversation_id=conversation_id,
             sender_type="ai",
-            content=ai_result.response,
+            content=response_text,
             intent=ai_result.intent,
             ai_confidence=ai_result.confidence,
             sentiment=getattr(ai_result, "sentiment", None),

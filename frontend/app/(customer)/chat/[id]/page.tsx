@@ -3,7 +3,7 @@
 import React, { useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { AlertTriangle, ArrowLeft, Bot, Brain, Layers3, Tag } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, ArrowUpRight, Bot, Brain, Layers3, Tag } from 'lucide-react'
 import { useConversationDetail } from '../../../../hooks/useConversations'
 import { messagesApi } from '../../../../lib/api'
 import { ChatWindow } from '../../../../components/chat/ChatWindow'
@@ -96,6 +96,7 @@ export default function ChatDetailPage() {
   const isEscalated = conversation.status === 'escalated'
   const lastAiMessage = aiMessages[aiMessages.length - 1]
   const lastIntent = lastAiMessage?.intent ?? null
+  const isHardBlocked = lastAiMessage?.intent === 'billing_limit'
 
   return (
     <div className="mx-auto flex h-[calc(100vh-8rem)] max-w-4xl flex-col overflow-hidden rounded-2xl border border-border bg-background-surface">
@@ -184,11 +185,27 @@ export default function ChatDetailPage() {
         />
       </div>
 
-      <ChatInput
-        onSend={handleSend}
-        disabled={aiLoading || streamingContent !== null || conversation.status === 'closed'}
-        placeholder={conversation.status === 'closed' ? 'This conversation is closed' : 'Type your message...'}
-      />
+      {isHardBlocked ? (
+        <div className="border-t border-red-500/20 bg-red-500/5 px-4 py-4">
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-sm text-red-300">
+              Monthly limit reached — upgrade to continue this conversation.
+            </p>
+            <Link href="/admin/billing">
+              <button className="shrink-0 flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:from-indigo-500 hover:to-purple-500 transition-all">
+                <ArrowUpRight size={14} />
+                Upgrade
+              </button>
+            </Link>
+          </div>
+        </div>
+      ) : (
+        <ChatInput
+          onSend={handleSend}
+          disabled={aiLoading || streamingContent !== null || conversation.status === 'closed'}
+          placeholder={conversation.status === 'closed' ? 'This conversation is closed' : 'Type your message...'}
+        />
+      )}
     </div>
   )
 }
