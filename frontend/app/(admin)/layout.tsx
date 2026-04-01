@@ -8,6 +8,7 @@ import {
   MessageCircle,
   Users,
   BarChart3,
+  CreditCard,
 } from 'lucide-react'
 import { DashboardLayout } from '../../components/layout/DashboardLayout'
 import { useAuth } from '../../hooks/useAuth'
@@ -19,6 +20,7 @@ const navItems = [
   { label: 'Conversations', href: '/admin/conversations', icon: MessageCircle },
   { label: 'Users', href: '/admin/users', icon: Users },
   { label: 'Analytics', href: '/admin/analytics', icon: BarChart3 },
+  { label: 'Plans & Billing', href: '/admin/billing', icon: CreditCard },
 ]
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

@@ -653,7 +653,7 @@ The event bus and worker system are already implemented — switching to Kafka r
 - [ ] **Human handoff UI** — Admin live-chat takeover for escalated conversations with full context hand-off
 - [ ] **Deeper observability** — Resolution time trends, CSAT scores, per-channel volume heatmaps, SLA breach alerts
 - [ ] **SLA automation** — Auto-escalation when tickets breach time or priority thresholds
-- [x] **SaaS monetization base** — Plan definitions (Free / Pro / Team) with monthly message/ticket limits, soft-limit warnings, and hard-limit blocking — `billing/plans.py`, `billing/limits.py`, `billing/usage_meter.py` live
+- [x] **SaaS monetization UI** — Admin "Plans & Billing" page exposes plan definitions, live usage bars, soft-warning / hard-block states, plan comparison cards (Free / Pro / Team), and integration readiness panel — backend endpoints `GET /admin/billing/summary` and `GET /admin/billing/plans` live; Stripe remains next phase
 - [ ] **Stripe billing integration** — Checkout, subscription lifecycle, plan upgrades / downgrades, and webhook-driven entitlement updates
 - [ ] **Usage metering (DB-backed)** — Persistent per-workspace message volume with monthly reset job; current in-memory meter is the Phase 6 stub
 - [ ] **Multi-tenant workspaces** — Full workspace isolation for B2B SaaS usage; per-tenant model config, KB, and escalation rules

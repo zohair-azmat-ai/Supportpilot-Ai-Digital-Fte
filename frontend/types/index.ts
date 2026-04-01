@@ -128,3 +128,49 @@ export interface SupportSubmitResponse {
   confirmation_message: string
   ai_response: string
 }
+
+// ── Phase 6 — SaaS Billing ──────────────────────────────────────────────────
+
+export interface BillingPlan {
+  tier: string
+  display_name: string
+  monthly_message_limit: number   // -1 = unlimited
+  monthly_ticket_limit: number    // -1 = unlimited
+  max_agents: number
+  whatsapp_enabled: boolean
+  email_enabled: boolean
+  analytics_enabled: boolean
+  multi_agent_enabled: boolean
+  sla_minutes: number | null
+  soft_limit_pct: number
+  features: string[]
+}
+
+export interface UsageCounter {
+  used: number
+  limit: number
+  pct: number
+  soft_warning: boolean
+  hard_blocked: boolean
+  unlimited: boolean
+}
+
+export interface MonetizationStatus {
+  usage_metering_live: boolean
+  stripe_enabled: boolean
+  plan_assignment: string
+  note: string
+}
+
+export interface BillingSummary {
+  current_plan: string
+  current_plan_display: string
+  current_plan_detail: BillingPlan
+  usage: {
+    messages: UsageCounter
+    tickets: UsageCounter
+  }
+  next_plan: BillingPlan | null
+  monetization_status: MonetizationStatus
+  available_plans: BillingPlan[]
+}

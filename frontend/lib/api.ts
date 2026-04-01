@@ -14,6 +14,8 @@ import {
   TicketStatus,
   TicketPriority,
   Role,
+  BillingSummary,
+  BillingPlan,
 } from '../types'
 
 const api = axios.create({
@@ -257,6 +259,18 @@ export const metricsApi = {
 
   getChannels: async (): Promise<ChannelMetricsResponse> => {
     const res = await api.get('/metrics/channels')
+    return res.data
+  },
+}
+
+export const billingApi = {
+  getSummary: async (): Promise<BillingSummary> => {
+    const res = await api.get('/admin/billing/summary')
+    return res.data
+  },
+
+  getPlans: async (): Promise<{ plans: BillingPlan[]; current_plan: string }> => {
+    const res = await api.get('/admin/billing/plans')
     return res.data
   },
 }
