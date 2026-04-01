@@ -635,7 +635,7 @@ All endpoints are prefixed with `/api/v1`. &nbsp; Interactive docs → [`/docs`]
 | **Phase 3 — Multi-channel** | WhatsApp + Email adapters · unified customer identity · email thread continuity · channel analytics | ✅ Done |
 | **Phase 4 — Advanced AI + Observability** | Real LLM decision engine · AI categorization (category/priority/urgency) · event lifecycle logging · escalation loop fixes · build status indicator · email test mode · KB pre-fetch | ✅ Done |
 | **Phase 5 — Memory + Retrieval** | Conversation memory layer · similar-issue retrieval · basic message-level RAG implemented · deeper context injection | ✅ Done |
-| **Phase 6 — Orchestration + SaaS** | Multi-agent routing (triage → specialist agents) · plan definitions + DB-backed tier assignment · usage metering + limit enforcement (hard-block / soft-warn) · upgrade UI · full Kafka pipeline · WebSocket token streaming · KEDA autoscaling · Stripe billing · multi-tenant workspaces | 🚧 In progress |
+| **Phase 6 — Orchestration + SaaS** | ✅ Multi-agent routing (triage → specialist agents) · ✅ plan definitions + DB-backed tier assignment · ✅ usage metering + limit enforcement (hard-block / soft-warn) · ✅ billing UI (Plans & Billing page + upgrade modal) · ✅ human handoff system (Take Over / Return to AI, AI pause, agent reply) · ✅ support queue + SLA system (5 queue groups, overdue/nearing/on-time, per-row + bulk actions) · ⏳ full Kafka pipeline · ⏳ WebSocket token streaming · ⏳ Stripe billing · ⏳ multi-tenant workspaces | 🚧 In progress |
 
 The event bus and worker system are already implemented — switching to Kafka requires one env var. See [docs/specs/scaling-architecture.md](docs/specs/scaling-architecture.md).
 
@@ -650,7 +650,9 @@ The event bus and worker system are already implemented — switching to Kafka r
 - [x] **Multi-agent routing (live)** — `RouterAgent` dispatches by intent/category to `BillingAgent`, `TechnicalAgent`, `AccountAgent` — wired into the live pipeline at Phase 1b.5, after decision engine, before escalation; `routed_agent` tracked in logs and metrics
 - [ ] **Multi-agent orchestration (full)** — LLM-specialised agents with shared context, cross-agent handoff, and audit trail
 - [ ] **WebSocket streaming** — Real-time GPT token streaming to the chat UI
-- [ ] **Human handoff UI** — Admin live-chat takeover for escalated conversations with full context hand-off
+- [x] **Human handoff UI** — Admin live-chat takeover for escalated conversations: Take Over / Return to AI buttons, AI auto-reply paused in human mode, agent-typed replies with headphones avatar, `handoff_mode` persisted per conversation, `HANDOFF_STARTED` / `HANDOFF_ENDED` audit events
+- [x] **Support queue + SLA system** — `/admin/queue` page with 5 queue groups (Escalated, Human Active, Urgent/High, AI Active, Waiting for Customer); SLA indicators per row (on time / nearing / overdue) based on ticket priority with urgency fallback; thresholds: urgent=30m, high=2h, medium=8h, low=24h; auto-refresh every 60s
+- [x] **Queue actions (per-row + bulk)** — Per-row: Open, Take Over, Return to AI, ↑ Priority, Mark Waiting; Bulk action bar (appears on selection): same four write actions applied to all selected items sequentially; optimistic local state updates; filter bar with Status / Priority / SLA dimensions (AND logic, client-side)
 - [ ] **Deeper observability** — Resolution time trends, CSAT scores, per-channel volume heatmaps, SLA breach alerts
 - [ ] **SLA automation** — Auto-escalation when tickets breach time or priority thresholds
 - [x] **SaaS monetization UI** — Admin "Plans & Billing" page exposes plan definitions, live usage bars, soft-warning / hard-block states, plan comparison cards (Free / Pro / Team), upgrade modal with direct DB plan assignment (`PATCH /admin/billing/plan`), and integration readiness panel; Stripe remains next phase
