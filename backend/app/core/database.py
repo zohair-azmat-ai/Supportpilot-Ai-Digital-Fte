@@ -808,6 +808,17 @@ _PATCHES = [
     ALTER TABLE users
         ADD COLUMN IF NOT EXISTS plan_tier VARCHAR(50) DEFAULT 'free'
     """,
+
+    # =========================================================================
+    # conversations — human handoff mode (Phase 6)
+    # =========================================================================
+
+    # handoff_mode — 'ai' = bot is responding; 'human' = admin has taken over.
+    # DEFAULT 'ai' backfills all existing rows so no conversation appears broken.
+    """
+    ALTER TABLE conversations
+        ADD COLUMN IF NOT EXISTS handoff_mode VARCHAR(20) DEFAULT 'ai'
+    """,
 ]
 
 

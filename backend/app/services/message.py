@@ -64,6 +64,26 @@ class MessageService:
                 detail="You do not have permission to post in this conversation",
             )
 
+        # Human handoff: store the user message but do NOT invoke the AI agent.
+        # The admin will reply manually via POST /admin/conversations/{id}/message.
+        if getattr(conversation, "handoff_mode", "ai") == "human":
+            msg_repo = MessageRepository(db)
+            user_message = await msg_repo.create_message(
+                conversation_id=conversation_id,
+                sender_type="user",
+                content=content,
+            )
+            await event_logger.log(
+                db,
+                event_logger.MESSAGE_RECEIVED,
+                user_id=user_id,
+                conversation_id=conversation_id,
+                channel=getattr(conversation, "channel", "web"),
+                details={"handoff_mode": "human"},
+            )
+            # Return user_message twice; callers only render the first (user) msg.
+            return user_message, user_message
+
         msg_repo = MessageRepository(db)
 
         # 1. Persist user message

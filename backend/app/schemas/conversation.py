@@ -33,6 +33,7 @@ class ConversationResponse(BaseModel):
     channel: str = "web"
     status: str = "active"
     subject: Optional[str] = None
+    handoff_mode: str = "ai"
     created_at: datetime
     updated_at: datetime
 

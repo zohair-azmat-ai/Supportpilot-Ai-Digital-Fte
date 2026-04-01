@@ -1,16 +1,16 @@
 'use client'
 
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import {
   AlertTriangle, ArrowLeft, ArrowUpRight, Bot, Brain,
-  Cpu, Layers3, Tag, Zap, TrendingUp, Clock,
+  Cpu, Headphones, Layers3, Send, Tag,
 } from 'lucide-react'
 import { useConversationDetail } from '../../../../hooks/useConversations'
 import { adminApi, messagesApi } from '../../../../lib/api'
 import { useAuth } from '../../../../hooks/useAuth'
-import { ConversationInsight } from '../../../../types'
+import { ConversationInsight, Message } from '../../../../types'
 import { ChatWindow } from '../../../../components/chat/ChatWindow'
 import { ChatInput } from '../../../../components/chat/ChatInput'
 import { ChannelBadge, ConversationStatusBadge, EscalationFlag } from '../../../../components/ui/Badge'
@@ -185,10 +185,21 @@ export default function ChatDetailPage() {
   const [aiLoading, setAiLoading] = useState(false)
   const [streamingContent, setStreamingContent] = useState<string | null>(null)
   const [insight, setInsight] = useState<ConversationInsight | null>(null)
-  const pendingUserMsg = useRef<import('../../../../types').Message | null>(null)
+  const [handoffMode, setHandoffMode] = useState<'ai' | 'human'>('ai')
+  const [handoffLoading, setHandoffLoading] = useState(false)
+  const [adminReply, setAdminReply] = useState('')
+  const [adminSending, setAdminSending] = useState(false)
+  const pendingUserMsg = useRef<Message | null>(null)
   const toast = useToast()
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
+
+  // Sync handoff_mode from conversation data
+  useEffect(() => {
+    if (conversation) {
+      setHandoffMode((conversation.handoff_mode ?? 'ai') as 'ai' | 'human')
+    }
+  }, [conversation?.handoff_mode])
 
   // Fetch AI insight for admins (non-blocking — failure silently ignored)
   useEffect(() => {
@@ -197,6 +208,34 @@ export default function ChatDetailPage() {
       .then((data) => setInsight(data))
       .catch(() => {/* no insight yet — new conversation or no metrics */})
   }, [id, isAdmin])
+
+  const handleHandoff = useCallback(async (mode: 'ai' | 'human') => {
+    setHandoffLoading(true)
+    try {
+      await adminApi.setHandoffMode(id, mode)
+      setHandoffMode(mode)
+      toast.success(mode === 'human' ? 'You are now handling this conversation.' : 'AI has resumed handling this conversation.')
+    } catch {
+      toast.error('Failed to update handoff mode.')
+    } finally {
+      setHandoffLoading(false)
+    }
+  }, [id, toast])
+
+  const handleAdminSend = useCallback(async () => {
+    const content = adminReply.trim()
+    if (!content) return
+    setAdminSending(true)
+    try {
+      const msg = await adminApi.sendMessage(id, content) as Message
+      addAiMessage(msg)  // addAiMessage appends to messages list
+      setAdminReply('')
+    } catch {
+      toast.error('Failed to send message.')
+    } finally {
+      setAdminSending(false)
+    }
+  }, [adminReply, id, addAiMessage, toast])
 
   const handleSend = async (content: string) => {
     if (!conversation) return
@@ -354,6 +393,52 @@ export default function ChatDetailPage() {
       {/* AI Insight panel — admin only, shown when metrics are available */}
       {isAdmin && insight && <AIInsightPanel insight={insight} />}
 
+      {/* Human Handoff panel — admin only, shown on escalated conversations */}
+      {isAdmin && isEscalated && (
+        <div className={cn(
+          'border-t px-4 py-3 flex items-center gap-3',
+          handoffMode === 'human'
+            ? 'border-emerald-500/20 bg-emerald-500/5'
+            : 'border-red-500/20 bg-red-500/5'
+        )}>
+          <div className={cn(
+            'flex h-7 w-7 shrink-0 items-center justify-center rounded-full',
+            handoffMode === 'human' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
+          )}>
+            <Headphones size={13} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className={cn('text-xs font-semibold', handoffMode === 'human' ? 'text-emerald-300' : 'text-red-300')}>
+              {handoffMode === 'human' ? 'Human Active — AI paused' : 'Escalated — awaiting handoff'}
+            </p>
+            <p className="text-[10px] text-slate-500">
+              {handoffMode === 'human'
+                ? 'You are replying directly. Click "Return to AI" to resume automation.'
+                : 'Click "Take Over" to handle this conversation manually.'}
+            </p>
+          </div>
+          {handoffMode === 'ai' ? (
+            <button
+              onClick={() => handleHandoff('human')}
+              disabled={handoffLoading}
+              className="shrink-0 flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white transition-colors disabled:opacity-50"
+            >
+              <Headphones size={12} />
+              Take Over
+            </button>
+          ) : (
+            <button
+              onClick={() => handleHandoff('ai')}
+              disabled={handoffLoading}
+              className="shrink-0 flex items-center gap-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 px-3 py-1.5 text-xs font-semibold text-slate-200 transition-colors disabled:opacity-50"
+            >
+              <Bot size={12} />
+              Return to AI
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto">
         <ChatWindow
           messages={conversation.messages}
@@ -364,6 +449,7 @@ export default function ChatDetailPage() {
         />
       </div>
 
+      {/* Bottom input area */}
       {isHardBlocked ? (
         <div className="border-t border-red-500/20 bg-red-500/5 px-4 py-4">
           <div className="flex items-center justify-between gap-4">
@@ -376,6 +462,33 @@ export default function ChatDetailPage() {
                 Upgrade
               </button>
             </Link>
+          </div>
+        </div>
+      ) : isAdmin && handoffMode === 'human' ? (
+        /* Admin reply input when in human handoff mode */
+        <div className="border-t border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
+          <div className="flex items-end gap-3">
+            <textarea
+              value={adminReply}
+              onChange={(e) => setAdminReply(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  handleAdminSend()
+                }
+              }}
+              placeholder="Reply as human agent… (Enter to send, Shift+Enter for newline)"
+              rows={2}
+              className="flex-1 resize-none rounded-xl border border-emerald-500/25 bg-background px-3 py-2.5 text-sm text-slate-200 placeholder-slate-600 outline-none focus:border-emerald-500/50 transition-colors"
+            />
+            <button
+              onClick={handleAdminSend}
+              disabled={adminSending || !adminReply.trim()}
+              className="shrink-0 flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors disabled:opacity-40"
+            >
+              <Send size={13} />
+              Send
+            </button>
           </div>
         </div>
       ) : (

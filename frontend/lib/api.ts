@@ -242,6 +242,16 @@ export const adminApi = {
     return res.data
   },
 
+  setHandoffMode: async (conversationId: string, mode: 'ai' | 'human') => {
+    const res = await api.patch(`/admin/conversations/${conversationId}/handoff`, { mode })
+    return res.data as { conversation_id: string; handoff_mode: string; updated: boolean }
+  },
+
+  sendMessage: async (conversationId: string, content: string) => {
+    const res = await api.post(`/admin/conversations/${conversationId}/message`, { content })
+    return res.data
+  },
+
   getUsers: async (): Promise<User[]> => {
     const res = await api.get('/admin/users')
     return res.data

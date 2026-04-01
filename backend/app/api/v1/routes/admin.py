@@ -20,6 +20,7 @@ from app.schemas.admin import AdminStatsResponse
 from app.schemas.auth import UserResponse
 from app.schemas.conversation import ConversationResponse
 from app.schemas.ticket import TicketResponse, UpdateTicketRequest
+from app.services.event_logger import event_logger
 from app.services.ticket import ticket_service
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -204,3 +205,104 @@ async def get_conversation_insight(
         priority=t.priority if t else None,
         ticket_status=t.status if t else None,
     )
+
+
+# ── Human Handoff ─────────────────────────────────────────────────────────────
+
+class HandoffRequest(BaseModel):
+    mode: str  # "ai" | "human"
+
+
+class HandoffResponse(BaseModel):
+    conversation_id: str
+    handoff_mode: str
+    updated: bool
+
+
+class AdminMessageRequest(BaseModel):
+    content: str
+
+
+@router.patch(
+    "/conversations/{conversation_id}/handoff",
+    response_model=HandoffResponse,
+    summary="Toggle human/AI handoff mode (admin)",
+)
+async def set_handoff_mode(
+    conversation_id: str,
+    body: HandoffRequest,
+    admin=Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> HandoffResponse:
+    """Set handoff_mode to 'ai' or 'human' for a conversation.
+
+    When 'human', the AI auto-reply is paused and the admin can reply
+    directly via POST /admin/conversations/{id}/message.
+    """
+    if body.mode not in ("ai", "human"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="mode must be 'ai' or 'human'",
+        )
+
+    conv_repo = ConversationRepository(db)
+    conv = await conv_repo.get_with_messages(conversation_id)
+    if conv is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+
+    await conv_repo.update(conversation_id, {"handoff_mode": body.mode})
+
+    event_type = (
+        event_logger.HANDOFF_STARTED if body.mode == "human" else event_logger.HANDOFF_ENDED
+    )
+    await event_logger.log(
+        db,
+        event_type,
+        user_id=admin.id,
+        conversation_id=conversation_id,
+        details={"mode": body.mode, "admin_id": admin.id},
+    )
+
+    return HandoffResponse(conversation_id=conversation_id, handoff_mode=body.mode, updated=True)
+
+
+@router.post(
+    "/conversations/{conversation_id}/message",
+    summary="Send an admin (agent) reply to a conversation (admin)",
+)
+async def admin_send_message(
+    conversation_id: str,
+    body: AdminMessageRequest,
+    admin=Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Post a message as sender_type='agent' on behalf of an admin.
+
+    Used when handoff_mode='human' so the admin can reply directly without
+    triggering the AI agent.
+    """
+    from app.repositories.message import MessageRepository
+
+    conv_repo = ConversationRepository(db)
+    conv = await conv_repo.get_with_messages(conversation_id)
+    if conv is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+
+    msg_repo = MessageRepository(db)
+    agent_msg = await msg_repo.create_message(
+        conversation_id=conversation_id,
+        sender_type="agent",
+        content=body.content.strip(),
+    )
+
+    await event_logger.log(
+        db,
+        event_logger.MESSAGE_RECEIVED,
+        user_id=admin.id,
+        conversation_id=conversation_id,
+        channel=getattr(conv, "channel", "web"),
+        details={"sender": "admin", "admin_id": admin.id},
+    )
+
+    from app.schemas.message import MessageResponse
+    return MessageResponse.model_validate(agent_msg).model_dump()

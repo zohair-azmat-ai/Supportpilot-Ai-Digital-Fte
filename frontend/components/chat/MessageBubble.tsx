@@ -1,6 +1,6 @@
 import React from 'react'
 import Link from 'next/link'
-import { Bot, User as UserIcon, Lock, ArrowRight, AlertTriangle } from 'lucide-react'
+import { Bot, User as UserIcon, Lock, ArrowRight, AlertTriangle, Headphones } from 'lucide-react'
 import { Channel, Message } from '../../types'
 import { formatRelativeDate, capitalize, cn } from '../../lib/utils'
 import { ChannelBadge, EscalationFlag, SentimentBadge } from '../ui/Badge'
@@ -77,6 +77,7 @@ function BillingLimitCard({ channel }: { channel: Channel }) {
 export function MessageBubble({ message, channel, escalated = false, isStreaming = false }: MessageBubbleProps) {
   const isUser = message.sender_type === 'user'
   const isAI = message.sender_type === 'ai'
+  const isAgent = message.sender_type === 'agent'
 
   // Hard-block: replace entire bubble with upgrade prompt
   if (isAI && message.intent === 'billing_limit') {
@@ -105,19 +106,30 @@ export function MessageBubble({ message, channel, escalated = false, isStreaming
         'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold',
         isUser
           ? 'bg-gradient-to-br from-indigo-500 to-purple-500 text-white'
+          : isAgent
+          ? 'bg-emerald-500/20 border border-emerald-500/30 text-emerald-400'
           : 'bg-background-elevated border border-border text-slate-400'
       )}>
-        {isUser ? <UserIcon size={14} /> : <Bot size={14} />}
+        {isUser ? <UserIcon size={14} /> : isAgent ? <Headphones size={14} /> : <Bot size={14} />}
       </div>
 
       {/* Content */}
       <div className={cn('flex flex-col gap-1.5 max-w-[75%]', isUser && 'items-end')}>
+        {/* Human agent label */}
+        {isAgent && (
+          <span className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider pl-1">
+            Human Agent
+          </span>
+        )}
+
         {/* Main bubble */}
         <div
           className={cn(
             'rounded-2xl px-4 py-3 text-sm leading-relaxed',
             isUser
               ? 'bg-gradient-to-br from-indigo-600 to-purple-600 text-white rounded-tr-sm'
+              : isAgent
+              ? 'bg-emerald-500/10 border border-emerald-500/20 text-slate-200 rounded-tl-sm'
               : 'bg-background-surface border border-border text-slate-200 rounded-tl-sm'
           )}
         >
@@ -173,8 +185,8 @@ export function MessageBubble({ message, channel, escalated = false, isStreaming
           </div>
         )}
 
-        {/* User message timestamp */}
-        {isUser && (
+        {/* Timestamp for user and agent messages */}
+        {(isUser || isAgent) && (
           <span className="text-[10px] text-slate-600">
             {formatRelativeDate(message.created_at)}
           </span>

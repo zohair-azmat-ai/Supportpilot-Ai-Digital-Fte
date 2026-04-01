@@ -37,6 +37,8 @@ class EventLogger:
     SIMILAR_ISSUE_DETECTED = "similar_issue_detected"
     DUPLICATE_TICKET_PREVENTED = "duplicate_ticket_prevented"
     SUPPORT_FORM_SUBMITTED = "support_form_submitted"
+    HANDOFF_STARTED = "handoff_started"
+    HANDOFF_ENDED = "handoff_ended"
 
     async def log(
         self,

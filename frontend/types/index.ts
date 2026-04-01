@@ -21,6 +21,7 @@ export interface Conversation {
   channel: Channel
   status: ConversationStatus
   subject: string | null
+  handoff_mode: 'ai' | 'human'
   created_at: string
   updated_at: string
 }

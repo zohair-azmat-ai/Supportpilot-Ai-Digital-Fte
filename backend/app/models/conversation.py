@@ -60,6 +60,15 @@ class Conversation(Base):
     # user re-raises the same topic without using explicit "still"/"again" language.
     last_intent: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
 
+    # handoff_mode — 'ai' means the bot is responding; 'human' means an admin
+    # has taken over and AI auto-replies are paused for this conversation.
+    handoff_mode: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="ai",
+        server_default="ai",
+    )
+
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
