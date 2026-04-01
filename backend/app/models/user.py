@@ -30,6 +30,11 @@ class User(Base):
         default="customer",
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Phase 6 — SaaS billing tier for this account.
+    # Allowed values: "free" | "pro" | "team". server_default backfills existing rows.
+    plan_tier: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="free", server_default="free"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

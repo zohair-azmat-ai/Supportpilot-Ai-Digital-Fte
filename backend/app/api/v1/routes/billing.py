@@ -1,12 +1,12 @@
 """
 Admin billing endpoints — Phase 6 SaaS monetization.
 
-GET /admin/billing/plans   — list all available plan definitions
-GET /admin/billing/summary — current plan + platform usage + limit flags
+GET   /admin/billing/plans   — list all available plan definitions
+GET   /admin/billing/summary — current plan + platform usage + limit flags
+PATCH /admin/billing/plan    — update the admin user's plan_tier (no Stripe)
 
-NOTE: current_plan defaults to "free" — workspace plan assignment is a
-future step (Stripe integration).  The response shape is already structured
-so callers can swap "free" for a real plan lookup with no API change.
+plan_tier is stored on the users table.  Changing it here is a direct DB
+write — no payment processing.  Stripe integration is a future phase.
 """
 
 from __future__ import annotations
@@ -14,11 +14,13 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.billing.plans import PLANS, PlanTier, get_plan
 from app.billing.usage_meter import usage_meter
-from app.core.deps import require_admin
+from app.core.deps import get_db, require_admin
 
 logger = logging.getLogger(__name__)
 
@@ -80,16 +82,73 @@ def _usage_counter(used: int, limit: int, soft_pct: float) -> Dict[str, Any]:
     summary="List all available billing plans",
 )
 async def get_billing_plans(
-    _admin=Depends(require_admin),
+    admin=Depends(require_admin),
 ) -> Dict[str, Any]:
     """Return all plan definitions (Free / Pro / Team).
 
     Plans are sourced directly from billing/plans.py — no DB query needed.
     """
+    raw_tier = getattr(admin, "plan_tier", None) or "free"
     return {
         "plans": [_plan_to_dict(p) for p in PLANS.values()],
-        "current_plan": "free",   # temporary default — replace with real lookup
-        "assignment_source": "default",  # "default" | "stripe" | "manual"
+        "current_plan": raw_tier,
+        "assignment_source": "db",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Request / response schemas
+# ---------------------------------------------------------------------------
+
+class UpdatePlanRequest(BaseModel):
+    plan_tier: str  # "free" | "pro" | "team"
+
+
+# ---------------------------------------------------------------------------
+# PATCH /plan
+# ---------------------------------------------------------------------------
+
+@router.patch(
+    "/plan",
+    summary="Update the admin user's billing plan tier (no Stripe)",
+)
+async def update_billing_plan(
+    body: UpdatePlanRequest,
+    admin=Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> Dict[str, Any]:
+    """Directly update the authenticated admin's plan_tier in the DB.
+
+    No payment processing — dev/demo endpoint only.
+    Stripe subscription management is the next phase.
+    """
+    try:
+        new_tier = PlanTier(body.plan_tier.lower())
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid plan_tier '{body.plan_tier}'. Must be one of: free, pro, team",
+        )
+
+    from sqlalchemy import text as sa_text
+
+    await db.execute(
+        sa_text("UPDATE users SET plan_tier = :tier WHERE id = :uid"),
+        {"tier": new_tier.value, "uid": admin.id},
+    )
+    await db.commit()
+
+    logger.info(
+        "Plan updated | user_id=%s old=%s new=%s",
+        admin.id,
+        getattr(admin, "plan_tier", "unknown"),
+        new_tier.value,
+    )
+    plan = get_plan(new_tier)
+    return {
+        "updated": True,
+        "plan_tier": new_tier.value,
+        "plan_detail": _plan_to_dict(plan),
     }
 
 
@@ -98,17 +157,21 @@ async def get_billing_plans(
     summary="Platform billing summary — current plan, usage, and limit flags",
 )
 async def get_billing_summary(
-    _admin=Depends(require_admin),
+    admin=Depends(require_admin),
 ) -> Dict[str, Any]:
     """Return current plan, usage counters, and limit-warning flags.
 
-    Temporary assumption: current_plan = "free" until workspace plan
-    assignment is implemented (Stripe phase).
+    current_plan is read from the authenticated admin user's plan_tier column.
+    Falls back to "free" if the field is missing or null (safe for any existing row).
 
     Usage is platform-wide (sum of all in-memory user counters).
     The in-memory meter resets on restart; a DB-backed meter is the next step.
     """
-    current_tier = PlanTier.FREE   # temporary default
+    raw_tier = getattr(admin, "plan_tier", None) or "free"
+    try:
+        current_tier = PlanTier(raw_tier)
+    except ValueError:
+        current_tier = PlanTier.FREE
     plan = get_plan(current_tier)
 
     # Sum all in-memory user counters for a platform-wide view
@@ -141,10 +204,11 @@ async def get_billing_summary(
         "monetization_status": {
             "usage_metering_live": True,
             "stripe_enabled": False,
-            "plan_assignment": "default",   # "default" | "stripe" | "manual"
+            "plan_assignment": "db",        # plan_tier stored on users table
             "note": (
-                "Usage metering is live (in-memory, resets on restart). "
-                "DB-backed metering and Stripe billing are the next phase."
+                "Plan tier is DB-backed (users.plan_tier). "
+                "Usage metering is in-memory (resets on restart). "
+                "Stripe billing is the next phase."
             ),
         },
         "available_plans": [_plan_to_dict(p) for p in PLANS.values()],

@@ -19,6 +19,8 @@ import {
   Users,
   Clock,
   Info,
+  X,
+  Sparkles,
 } from 'lucide-react'
 import { billingApi } from '../../../../lib/api'
 import { BillingSummary, BillingPlan, UsageCounter } from '../../../../types'
@@ -96,6 +98,120 @@ function UsageBar({ counter, label, icon: Icon }: {
   )
 }
 
+// ── Upgrade modal ────────────────────────────────────────────────────────────
+
+const UPGRADE_BENEFITS: Record<string, string[]> = {
+  pro: [
+    '2,000 AI messages per month (10× Free)',
+    '500 support tickets per month',
+    'WhatsApp + Email channel support',
+    'Full analytics dashboard',
+    'Multi-agent routing (Billing / Technical / Account)',
+    '30-minute SLA',
+    'Priority support',
+  ],
+  team: [
+    'Unlimited messages & tickets',
+    'All Pro features included',
+    'Dedicated agent slots',
+    '15-minute SLA',
+    'Custom integrations & API access',
+    'Dedicated account manager',
+  ],
+}
+
+function UpgradeModal({
+  plan,
+  onClose,
+  onConfirm,
+  loading,
+}: {
+  plan: BillingPlan
+  onClose: () => void
+  onConfirm: (tier: string) => void
+  loading: boolean
+}) {
+  const benefits = UPGRADE_BENEFITS[plan.tier] ?? plan.features
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+
+      {/* Panel */}
+      <div className="relative w-full max-w-lg rounded-2xl border border-border bg-background-surface shadow-2xl">
+        {/* Header */}
+        <div className="flex items-start justify-between p-6 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600">
+              <Sparkles size={18} className="text-white" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-slate-100">
+                Upgrade to {plan.display_name}
+              </h2>
+              <p className="text-sm text-slate-500">
+                Unlock higher limits and premium features
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-slate-500 hover:text-slate-300 transition-colors"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Benefits */}
+        <div className="px-6 pb-4 space-y-2.5">
+          {benefits.map((b, i) => (
+            <div key={i} className="flex items-start gap-2.5 text-sm text-slate-300">
+              <CheckCircle size={15} className="shrink-0 mt-0.5 text-emerald-500" />
+              <span>{b}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Dev note */}
+        <div className="mx-6 mb-4 flex items-start gap-2.5 rounded-xl border border-amber-500/20 bg-amber-500/8 p-3">
+          <Info size={14} className="shrink-0 mt-0.5 text-amber-400" />
+          <p className="text-xs text-slate-400">
+            <span className="font-semibold text-amber-300">Demo mode — </span>
+            No payment required. This updates your plan tier directly in the DB.
+            Stripe billing integration is the next phase.
+          </p>
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-3 px-6 pb-6">
+          <button
+            onClick={onClose}
+            className="flex-1 rounded-xl border border-border py-2.5 text-sm font-medium text-slate-400 hover:text-slate-200 hover:border-slate-500 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onConfirm(plan.tier)}
+            disabled={loading}
+            className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 py-2.5 text-sm font-semibold text-white hover:from-indigo-500 hover:to-purple-500 disabled:opacity-60 disabled:cursor-not-allowed transition-all"
+          >
+            {loading ? (
+              <RefreshCw size={14} className="animate-spin" />
+            ) : (
+              <ArrowRight size={14} />
+            )}
+            {loading ? 'Activating…' : `Activate ${plan.display_name}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Plan card ────────────────────────────────────────────────────────────────
 
 const PLAN_STYLES: Record<string, {
@@ -141,9 +257,11 @@ function formatLimit(value: number): string {
 function PlanCard({
   plan,
   isCurrent,
+  onUpgrade,
 }: {
   plan: BillingPlan
   isCurrent: boolean
+  onUpgrade?: (plan: BillingPlan) => void
 }) {
   const style = PLAN_STYLES[plan.tier] ?? PLAN_STYLES.free
 
@@ -255,14 +373,11 @@ function PlanCard({
           </button>
         ) : (
           <button
-            disabled
-            className="w-full rounded-xl bg-accent/15 border border-accent/30 py-2.5 text-sm font-semibold text-accent-light cursor-not-allowed flex items-center justify-center gap-2"
-            title="Stripe integration coming next phase"
+            onClick={() => onUpgrade?.(plan)}
+            className="w-full rounded-xl bg-accent/15 border border-accent/30 py-2.5 text-sm font-semibold text-accent-light hover:bg-accent/25 hover:border-accent/50 transition-colors flex items-center justify-center gap-2"
           >
+            <ArrowRight size={14} />
             Upgrade to {plan.display_name}
-            <span className="text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-full px-1.5 py-0.5">
-              Soon
-            </span>
           </button>
         )}
       </div>
@@ -276,6 +391,8 @@ export default function BillingPage() {
   const [summary, setSummary] = useState<BillingSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [upgradeTarget, setUpgradeTarget] = useState<BillingPlan | null>(null)
+  const [upgrading, setUpgrading] = useState(false)
   const toast = useToast()
 
   const fetchData = async (isRefresh = false) => {
@@ -291,6 +408,22 @@ export default function BillingPage() {
       if (isRefresh) toast.error('Failed to refresh billing data')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleUpgradeConfirm = async (tier: string) => {
+    console.log('upgrade_intent', tier)
+    setUpgrading(true)
+    try {
+      await billingApi.updatePlan(tier)
+      toast.success(`Plan upgraded to ${tier.charAt(0).toUpperCase() + tier.slice(1)}!`)
+      setUpgradeTarget(null)
+      await fetchData()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Upgrade failed'
+      toast.error(msg)
+    } finally {
+      setUpgrading(false)
     }
   }
 
@@ -319,6 +452,16 @@ export default function BillingPage() {
 
   return (
     <div className="space-y-8 max-w-6xl">
+
+      {/* ── Upgrade modal (portal-less, rendered at top of tree) ── */}
+      {upgradeTarget && (
+        <UpgradeModal
+          plan={upgradeTarget}
+          onClose={() => setUpgradeTarget(null)}
+          onConfirm={handleUpgradeConfirm}
+          loading={upgrading}
+        />
+      )}
 
       {/* ── Page header ── */}
       <div className="flex items-start justify-between">
@@ -481,6 +624,7 @@ export default function BillingPage() {
               key={plan.tier}
               plan={plan}
               isCurrent={plan.tier === current_plan}
+              onUpgrade={setUpgradeTarget}
             />
           ))}
         </div>

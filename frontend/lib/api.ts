@@ -273,6 +273,11 @@ export const billingApi = {
     const res = await api.get('/admin/billing/plans')
     return res.data
   },
+
+  updatePlan: async (planTier: string): Promise<{ updated: boolean; plan_tier: string; plan_detail: BillingPlan }> => {
+    const res = await api.patch('/admin/billing/plan', { plan_tier: planTier })
+    return res.data
+  },
 }
 
 export default api

@@ -797,6 +797,17 @@ _PATCHES = [
     ALTER TABLE messages
         ADD COLUMN IF NOT EXISTS channel VARCHAR(50) DEFAULT 'web'
     """,
+
+    # =========================================================================
+    # users — Phase 6 plan assignment
+    # =========================================================================
+
+    # plan_tier — SaaS billing tier for this user ("free" | "pro" | "team").
+    # DEFAULT 'free' backfills all existing rows automatically; no data loss.
+    """
+    ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS plan_tier VARCHAR(50) DEFAULT 'free'
+    """,
 ]
 
 

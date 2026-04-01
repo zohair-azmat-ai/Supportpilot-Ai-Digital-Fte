@@ -128,6 +128,45 @@ async def run_inbound_support_pipeline(
         "[pipeline:triage] conversation_id=%s user_id=%s channel=%s turn=%d last_intent=%s",
         active_conv.id, user.id, channel, len(history), stored_last_intent or "none",
     )
+
+    # ── Billing enforcement ────────────────────────────────────────────────────
+    from app.billing.limits import check_limits
+    from app.billing.usage_meter import usage_meter as _meter
+
+    plan_tier = getattr(user, "plan_tier", "free") or "free"
+    limit_result = await check_limits(
+        user_id=user.id,
+        plan_tier=plan_tier,
+        action="message",
+        db=db,
+    )
+
+    if limit_result.hard_blocked:
+        logger.info(
+            "[pipeline:blocked] user=%s plan=%s messages=%d/%d",
+            user.id, plan_tier, limit_result.current_count, limit_result.limit,
+        )
+        blocked_msg = await msg_repo.create_message(
+            conversation_id=active_conv.id,
+            sender_type="ai",
+            content=limit_result.message,
+            intent="billing_limit",
+            metadata={"channel": channel, "hard_blocked": True},
+        )
+        return ChannelPipelineResult(
+            conversation_id=active_conv.id,
+            ai_message_id=blocked_msg.id,
+            response_text=limit_result.message,
+            user_id=user.id,
+            sender_phone=inbound.sender_phone,
+            intent="billing_limit",
+            confidence=1.0,
+            escalated=False,
+        )
+
+    # Record usage now that we know the request will be processed
+    await _meter.record_message(user.id)
+
     t0 = time.monotonic()
     ai_result = await support_agent.run(
         db=db,
@@ -145,6 +184,15 @@ async def run_inbound_support_pipeline(
         getattr(ai_result, "routed_agent", "general"), response_ms,
     )
 
+    # Soft-limit warning: append a gentle note to the AI response
+    response_text = ai_result.response
+    if limit_result.soft_warning:
+        response_text = (
+            f"{response_text}\n\n"
+            f"---\n"
+            f"_Note: {limit_result.message}_"
+        )
+
     ai_msg_metadata: dict[str, Any] = {
         "channel": channel,
         "should_escalate": ai_result.should_escalate,
@@ -160,7 +208,7 @@ async def run_inbound_support_pipeline(
     ai_message = await msg_repo.create_message(
         conversation_id=active_conv.id,
         sender_type="ai",
-        content=ai_result.response,
+        content=response_text,
         intent=ai_result.intent,
         ai_confidence=ai_result.confidence,
         sentiment=getattr(ai_result, "sentiment", None),
@@ -267,7 +315,7 @@ async def run_inbound_support_pipeline(
     return ChannelPipelineResult(
         conversation_id=active_conv.id,
         ai_message_id=ai_message.id,
-        response_text=ai_result.response,
+        response_text=response_text,
         user_id=user.id,
         sender_phone=inbound.sender_phone,
         intent=ai_result.intent,
