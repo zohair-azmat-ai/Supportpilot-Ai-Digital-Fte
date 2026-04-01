@@ -237,6 +237,11 @@ export const adminApi = {
     return res.data
   },
 
+  getConversationInsight: async (conversationId: string) => {
+    const res = await api.get(`/admin/conversations/${conversationId}/insight`)
+    return res.data
+  },
+
   getUsers: async (): Promise<User[]> => {
     const res = await api.get('/admin/users')
     return res.data

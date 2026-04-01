@@ -6,11 +6,13 @@ import logging
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db, require_admin
 
 logger = logging.getLogger(__name__)
+from app.repositories.agent_metrics import AgentMetricsRepository
 from app.repositories.conversation import ConversationRepository
 from app.repositories.user import UserRepository
 from app.repositories.ticket import TicketRepository
@@ -21,6 +23,26 @@ from app.schemas.ticket import TicketResponse, UpdateTicketRequest
 from app.services.ticket import ticket_service
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
+
+
+class ConversationInsightResponse(BaseModel):
+    """Latest AI reasoning snapshot for one conversation."""
+    # From latest AgentMetrics row (None when no metrics recorded yet)
+    routed_agent: Optional[str] = None
+    intent: Optional[str] = None
+    confidence: Optional[float] = None
+    escalated: bool = False
+    escalation_reason: Optional[str] = None
+    escalation_level: Optional[str] = None
+    escalation_cause: Optional[str] = None
+    urgency: Optional[str] = None
+    sentiment: Optional[str] = None
+    response_time_ms: Optional[float] = None
+    # From latest Ticket linked to this conversation (None when no ticket)
+    ticket_id: Optional[str] = None
+    category: Optional[str] = None
+    priority: Optional[str] = None
+    ticket_status: Optional[str] = None
 
 
 @router.get(
@@ -133,3 +155,52 @@ async def list_all_users(
     repo = UserRepository(db)
     users = await repo.get_all_users(skip=skip, limit=limit)
     return [UserResponse.model_validate(u) for u in users]
+
+
+@router.get(
+    "/conversations/{conversation_id}/insight",
+    response_model=ConversationInsightResponse,
+    summary="Latest AI insight for a conversation (admin)",
+)
+async def get_conversation_insight(
+    conversation_id: str,
+    _admin=Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ConversationInsightResponse:
+    """Return the latest AI agent reasoning snapshot for a conversation.
+
+    Combines the most recent AgentMetrics record with the most recent
+    Ticket linked to the conversation.  Returns a 404 when no metrics
+    have been recorded yet (e.g. the conversation has no AI reply).
+    """
+    metrics_repo = AgentMetricsRepository(db)
+    all_metrics = await metrics_repo.get_by_conversation(conversation_id)
+
+    if not all_metrics:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No AI metrics recorded for this conversation yet.",
+        )
+
+    m = all_metrics[-1]  # latest record (list is ordered asc by created_at)
+
+    ticket_repo = TicketRepository(db)
+    tickets = await ticket_repo.get_by_conversation(conversation_id)
+    t = tickets[-1] if tickets else None
+
+    return ConversationInsightResponse(
+        routed_agent=m.routed_agent,
+        intent=m.intent_detected,
+        confidence=m.confidence_score,
+        escalated=bool(m.was_escalated),
+        escalation_reason=m.escalation_reason,
+        escalation_level=m.escalation_level,
+        escalation_cause=m.escalation_cause,
+        urgency=m.urgency,
+        sentiment=m.sentiment,
+        response_time_ms=m.response_time_ms,
+        ticket_id=t.id if t else None,
+        category=t.category if t else None,
+        priority=t.priority if t else None,
+        ticket_status=t.status if t else None,
+    )

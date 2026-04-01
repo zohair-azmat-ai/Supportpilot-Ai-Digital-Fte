@@ -135,6 +135,25 @@ export interface SupportSubmitResponse {
   ai_response: string
 }
 
+// ── Phase 6 — AI insight ────────────────────────────────────────────────────
+
+export interface ConversationInsight {
+  routed_agent: string | null
+  intent: string | null
+  confidence: number | null
+  escalated: boolean
+  escalation_reason: string | null
+  escalation_level: string | null
+  escalation_cause: string | null
+  urgency: string | null
+  sentiment: string | null
+  response_time_ms: number | null
+  ticket_id: string | null
+  category: string | null
+  priority: string | null
+  ticket_status: string | null
+}
+
 // ── Phase 6 — SaaS Billing ──────────────────────────────────────────────────
 
 export interface BillingPlan {
