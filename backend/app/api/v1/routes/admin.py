@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db, require_admin
@@ -306,3 +308,126 @@ async def admin_send_message(
 
     from app.schemas.message import MessageResponse
     return MessageResponse.model_validate(agent_msg).model_dump()
+
+
+# ── Support Queue ─────────────────────────────────────────────────────────────
+
+class QueueItem(BaseModel):
+    """One row in the admin support queue — conversation enriched with ticket + AI data."""
+    conversation_id: str
+    subject: Optional[str] = None
+    user_id: str
+    channel: str
+    status: str
+    handoff_mode: str
+    created_at: datetime
+    updated_at: datetime
+    # From latest ticket linked to this conversation
+    ticket_id: Optional[str] = None
+    ticket_priority: Optional[str] = None
+    ticket_status: Optional[str] = None
+    ticket_category: Optional[str] = None
+    # From latest agent_metrics row
+    routed_agent: Optional[str] = None
+    urgency: Optional[str] = None
+    sentiment: Optional[str] = None
+
+
+@router.get(
+    "/queue",
+    response_model=List[QueueItem],
+    summary="Support queue — all active/escalated conversations enriched with ticket+AI data (admin)",
+)
+async def get_support_queue(
+    _admin=Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> List[QueueItem]:
+    """Return all non-closed conversations enriched with the latest ticket and AI metrics.
+
+    Covers escalated conversations, human-active handoffs, and any active conversation
+    that has an open ticket — everything an on-call agent needs to triage.
+
+    The response is ordered by updated_at descending (most recently active first).
+    Ticket and AI data are fetched in two batch queries (no N+1).
+    """
+    from app.models.conversation import Conversation
+    from app.models.ticket import Ticket
+    from app.models.agent_metrics import AgentMetrics
+
+    # 1. All non-closed conversations
+    conv_result = await db.execute(
+        select(Conversation)
+        .where(Conversation.status != "closed")
+        .order_by(Conversation.updated_at.desc())
+        .limit(200)
+    )
+    conversations = list(conv_result.scalars().all())
+    if not conversations:
+        return []
+
+    conv_ids = [c.id for c in conversations]
+
+    # 2. Latest ticket per conversation (one batch query using row_number)
+    # Sub-select ranks tickets per conversation by created_at desc
+    ticket_rank_sub = (
+        select(
+            Ticket,
+            func.row_number()
+            .over(
+                partition_by=Ticket.conversation_id,
+                order_by=Ticket.created_at.desc(),
+            )
+            .label("rn"),
+        )
+        .where(Ticket.conversation_id.in_(conv_ids))
+        .subquery()
+    )
+    ticket_result = await db.execute(
+        select(ticket_rank_sub).where(ticket_rank_sub.c.rn == 1)
+    )
+    ticket_rows = ticket_result.mappings().all()
+    ticket_map: dict = {row["conversation_id"]: row for row in ticket_rows}
+
+    # 3. Latest agent_metrics per conversation (same pattern)
+    metrics_rank_sub = (
+        select(
+            AgentMetrics,
+            func.row_number()
+            .over(
+                partition_by=AgentMetrics.conversation_id,
+                order_by=AgentMetrics.created_at.desc(),
+            )
+            .label("rn"),
+        )
+        .where(AgentMetrics.conversation_id.in_(conv_ids))
+        .subquery()
+    )
+    metrics_result = await db.execute(
+        select(metrics_rank_sub).where(metrics_rank_sub.c.rn == 1)
+    )
+    metrics_rows = metrics_result.mappings().all()
+    metrics_map: dict = {row["conversation_id"]: row for row in metrics_rows}
+
+    # 4. Assemble QueueItems
+    items: List[QueueItem] = []
+    for conv in conversations:
+        t = ticket_map.get(conv.id)
+        m = metrics_map.get(conv.id)
+        items.append(QueueItem(
+            conversation_id=conv.id,
+            subject=conv.subject,
+            user_id=conv.user_id,
+            channel=conv.channel,
+            status=conv.status,
+            handoff_mode=getattr(conv, "handoff_mode", "ai") or "ai",
+            created_at=conv.created_at,
+            updated_at=conv.updated_at,
+            ticket_id=t["id"] if t else None,
+            ticket_priority=t["priority"] if t else None,
+            ticket_status=t["status"] if t else None,
+            ticket_category=t["category"] if t else None,
+            routed_agent=m["routed_agent"] if m else None,
+            urgency=m["urgency"] if m else None,
+            sentiment=m["sentiment"] if m else None,
+        ))
+    return items

@@ -136,6 +136,26 @@ export interface SupportSubmitResponse {
   ai_response: string
 }
 
+// ── Support Queue ───────────────────────────────────────────────────────────
+
+export interface QueueItem {
+  conversation_id: string
+  subject: string | null
+  user_id: string
+  channel: Channel
+  status: ConversationStatus
+  handoff_mode: 'ai' | 'human'
+  created_at: string
+  updated_at: string
+  ticket_id: string | null
+  ticket_priority: string | null
+  ticket_status: string | null
+  ticket_category: string | null
+  routed_agent: string | null
+  urgency: string | null
+  sentiment: string | null
+}
+
 // ── Phase 6 — AI insight ────────────────────────────────────────────────────
 
 export interface ConversationInsight {

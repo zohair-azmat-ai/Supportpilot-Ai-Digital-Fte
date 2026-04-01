@@ -9,6 +9,7 @@ import {
   Users,
   BarChart3,
   CreditCard,
+  ListChecks,
 } from 'lucide-react'
 import { DashboardLayout } from '../../components/layout/DashboardLayout'
 import { useAuth } from '../../hooks/useAuth'
@@ -16,6 +17,7 @@ import { PageLoader } from '../../components/ui/LoadingSpinner'
 
 const navItems = [
   { label: 'Overview', href: '/admin', icon: LayoutDashboard },
+  { label: 'Queue', href: '/admin/queue', icon: ListChecks },
   { label: 'Tickets', href: '/admin/tickets', icon: Ticket },
   { label: 'Conversations', href: '/admin/conversations', icon: MessageCircle },
   { label: 'Users', href: '/admin/users', icon: Users },

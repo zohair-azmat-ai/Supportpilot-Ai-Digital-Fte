@@ -16,6 +16,7 @@ import {
   Role,
   BillingSummary,
   BillingPlan,
+  QueueItem,
 } from '../types'
 
 const api = axios.create({
@@ -262,6 +263,11 @@ export const adminApi = {
     data: Partial<{ status: TicketStatus; priority: TicketPriority; assigned_to: string }>
   ): Promise<Ticket> => {
     const res = await api.patch(`/admin/tickets/${id}`, data)
+    return res.data
+  },
+
+  getQueue: async (): Promise<QueueItem[]> => {
+    const res = await api.get('/admin/queue')
     return res.data
   },
 }
