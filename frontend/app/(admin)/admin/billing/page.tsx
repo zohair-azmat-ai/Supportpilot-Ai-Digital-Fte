@@ -21,9 +21,11 @@ import {
   Info,
   X,
   Sparkles,
+  History,
+  ExternalLink,
 } from 'lucide-react'
 import { billingApi } from '../../../../lib/api'
-import { BillingSummary, BillingPlan, UsageCounter } from '../../../../types'
+import { BillingSummary, BillingPlan, UsageCounter, BillingEvent } from '../../../../types'
 import { Card } from '../../../../components/ui/Card'
 import { Button } from '../../../../components/ui/Button'
 import { Badge } from '../../../../components/ui/Badge'
@@ -387,20 +389,65 @@ function PlanCard({
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
+// ── Subscription status badge ────────────────────────────────────────────────
+
+const SUB_STATUS_CFG: Record<string, { label: string; cls: string; dot: string }> = {
+  none:      { label: 'No subscription',   cls: 'border-slate-700/50 bg-slate-800/40 text-slate-500',   dot: 'bg-slate-600' },
+  trial:     { label: 'Trial',             cls: 'border-amber-500/30 bg-amber-500/10  text-amber-300',  dot: 'bg-amber-400 animate-pulse' },
+  active:    { label: 'Active',            cls: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300', dot: 'bg-emerald-400 animate-pulse' },
+  past_due:  { label: 'Past due',          cls: 'border-red-500/30 bg-red-500/10 text-red-300',         dot: 'bg-red-400' },
+  canceled:  { label: 'Canceled',          cls: 'border-slate-600/40 bg-slate-700/20 text-slate-500',   dot: 'bg-slate-600' },
+}
+
+function SubStatusBadge({ status }: { status: string }) {
+  const cfg = SUB_STATUS_CFG[status] ?? SUB_STATUS_CFG.none
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${cfg.cls}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
+      {cfg.label}
+    </span>
+  )
+}
+
+// ── Event type display ────────────────────────────────────────────────────────
+
+const EVENT_TYPE_CFG: Record<string, { label: string; cls: string }> = {
+  plan_activated:         { label: 'Plan activated',         cls: 'text-emerald-400' },
+  plan_changed:           { label: 'Plan changed',           cls: 'text-indigo-400' },
+  trial_started:          { label: 'Trial started',          cls: 'text-amber-400' },
+  checkout_requested:     { label: 'Checkout requested',     cls: 'text-sky-400' },
+  subscription_activated: { label: 'Subscription activated', cls: 'text-emerald-400' },
+  subscription_canceled:  { label: 'Subscription canceled',  cls: 'text-red-400' },
+  payment_failed:         { label: 'Payment failed',         cls: 'text-red-400' },
+}
+
+function formatEventDate(iso: string): string {
+  const d = new Date(iso)
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+// ── Page ─────────────────────────────────────────────────────────────────────
+
 export default function BillingPage() {
   const [summary, setSummary] = useState<BillingSummary | null>(null)
+  const [history, setHistory] = useState<BillingEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [upgradeTarget, setUpgradeTarget] = useState<BillingPlan | null>(null)
   const [upgrading, setUpgrading] = useState(false)
+  const [checkoutLoading, setCheckoutLoading] = useState(false)
   const toast = useToast()
 
   const fetchData = async (isRefresh = false) => {
     setLoading(true)
     setError(null)
     try {
-      const data = await billingApi.getSummary()
+      const [data, hist] = await Promise.all([
+        billingApi.getSummary(),
+        billingApi.getHistory().catch(() => ({ events: [], total: 0 })),
+      ])
       setSummary(data)
+      setHistory(hist.events)
       if (isRefresh) toast.success('Billing data refreshed')
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to load billing data'
@@ -411,12 +458,30 @@ export default function BillingPage() {
     }
   }
 
+  const handleCheckoutRequest = async (tier: string) => {
+    setCheckoutLoading(true)
+    try {
+      const res = await billingApi.startCheckout(tier)
+      toast.info(res.message)
+      // Refresh history so the checkout_requested event appears
+      billingApi.getHistory().then((h) => setHistory(h.events)).catch(() => {})
+    } catch {
+      toast.error('Checkout request failed.')
+    } finally {
+      setCheckoutLoading(false)
+    }
+  }
+
   const handleUpgradeConfirm = async (tier: string) => {
-    console.log('upgrade_intent', tier)
+    console.log('checkout_clicked', tier)
     setUpgrading(true)
     try {
+      // Record checkout intent + surface "Stripe coming soon" message
+      const checkoutRes = await billingApi.startCheckout(tier).catch(() => null)
+      if (checkoutRes) toast.info(checkoutRes.message)
+      // Demo: directly update plan tier in DB (no payment required)
       await billingApi.updatePlan(tier)
-      toast.success(`Plan upgraded to ${tier.charAt(0).toUpperCase() + tier.slice(1)}!`)
+      toast.success(`Plan activated: ${tier.charAt(0).toUpperCase() + tier.slice(1)} (demo mode)`)
       setUpgradeTarget(null)
       await fetchData()
     } catch (err: unknown) {
@@ -446,7 +511,7 @@ export default function BillingPage() {
 
   if (!summary) return null
 
-  const { current_plan, current_plan_display, current_plan_detail, usage, available_plans, monetization_status } = summary
+  const { current_plan, current_plan_display, current_plan_detail, usage, available_plans, monetization_status, subscription } = summary
   const hasWarning = usage.messages.soft_warning || usage.tickets.soft_warning
   const hasBlock   = usage.messages.hard_blocked  || usage.tickets.hard_blocked
 
@@ -609,6 +674,35 @@ export default function BillingPage() {
         </Card>
       </div>
 
+      {/* ── Subscription Status ── */}
+      <Card title="Subscription Status" description="Stripe lifecycle state for this account">
+        <div className="flex flex-wrap items-center gap-6">
+          <div className="flex items-center gap-3">
+            <SubStatusBadge status={subscription.status} />
+          </div>
+          <div className="flex items-center gap-2 text-sm text-slate-400">
+            <span className="text-slate-600">Plan:</span>
+            <span className="font-medium text-slate-300">{current_plan_display}</span>
+          </div>
+          {subscription.current_period_end ? (
+            <div className="flex items-center gap-2 text-sm text-slate-400">
+              <Clock size={13} className="text-slate-600" />
+              <span className="text-slate-600">Period ends:</span>
+              <span className="font-medium text-slate-300">
+                {new Date(subscription.current_period_end).toLocaleDateString('en-GB', {
+                  day: '2-digit', month: 'short', year: 'numeric',
+                })}
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <Clock size={13} className="text-slate-600" />
+              <span>No active billing period — Stripe not yet connected</span>
+            </div>
+          )}
+        </div>
+      </Card>
+
       {/* ── Plan comparison ── */}
       <div className="space-y-4">
         <div>
@@ -674,6 +768,57 @@ export default function BillingPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* ── Billing History ── */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <History size={16} className="text-slate-500" />
+          <h2 className="text-lg font-semibold text-slate-100">Billing History</h2>
+        </div>
+
+        {history.length === 0 ? (
+          <div className="rounded-xl border border-border bg-background-surface px-6 py-10 text-center">
+            <p className="text-sm text-slate-500">No billing events yet.</p>
+            <p className="text-xs text-slate-600 mt-1">Events are recorded when you change plans or request checkout.</p>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-border bg-background-surface overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Event</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Plan change</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.slice(0, 10).map((evt, i) => {
+                  const cfg = EVENT_TYPE_CFG[evt.event_type] ?? { label: evt.event_type, cls: 'text-slate-400' }
+                  return (
+                    <tr key={evt.id} className={i % 2 === 0 ? 'bg-background-elevated/40' : ''}>
+                      <td className={`px-4 py-3 font-medium ${cfg.cls}`}>{cfg.label}</td>
+                      <td className="px-4 py-3 text-slate-500">
+                        {evt.old_tier || evt.new_tier ? (
+                          <span>
+                            {evt.old_tier ?? '—'}
+                            {' → '}
+                            <span className="text-slate-300">{evt.new_tier ?? '—'}</span>
+                          </span>
+                        ) : (
+                          <span className="text-slate-600">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right text-slate-500 tabular-nums">
+                        {formatEventDate(evt.created_at)}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
     </div>

@@ -5,6 +5,8 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
+from typing import Optional
+
 from sqlalchemy import Boolean, DateTime, Enum, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -35,6 +37,17 @@ class User(Base):
     plan_tier: Mapped[str] = mapped_column(
         String(50), nullable=False, default="free", server_default="free"
     )
+
+    # Stripe-ready subscription fields (populated by webhook handlers when Stripe goes live).
+    # subscription_status: "none" | "trial" | "active" | "past_due" | "canceled"
+    subscription_status: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="none", server_default="none"
+    )
+    # Unix-epoch or ISO timestamp of the current billing period end; null until Stripe activated.
+    current_period_end: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

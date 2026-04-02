@@ -656,6 +656,7 @@ The event bus and worker system are already implemented — switching to Kafka r
 - [ ] **Deeper observability** — Resolution time trends, CSAT scores, per-channel volume heatmaps, SLA breach alerts
 - [ ] **SLA automation** — Auto-escalation when tickets breach time or priority thresholds
 - [x] **SaaS monetization UI** — Admin "Plans & Billing" page exposes plan definitions, live usage bars, soft-warning / hard-block states, plan comparison cards (Free / Pro / Team), upgrade modal with direct DB plan assignment (`PATCH /admin/billing/plan`), and integration readiness panel; Stripe remains next phase
+- [x] **Stripe-ready subscription foundation** — `subscription_status` + `current_period_end` columns on users; `billing_events` audit-log table; `GET /admin/billing/status`, `GET /admin/billing/events`, `POST /admin/billing/checkout-session` (stub); Subscription Status card + Billing History table in Plans & Billing page; live Stripe checkout is next phase
 - [x] **Billing status in overview** — Compact banner on the main admin dashboard shows current plan, message/ticket usage bars, and limit state (All good / Near limit / Limit reached) with a direct link to the Billing page
 - [x] **Billing limit enforcement** — Hard-block at 100% (AI response replaced with upgrade prompt), soft-warning note appended to AI replies at 80%; per-user usage meter wired into every inbound message
 - [ ] **Stripe billing integration** — Checkout, subscription lifecycle, plan upgrades / downgrades, and webhook-driven entitlement updates

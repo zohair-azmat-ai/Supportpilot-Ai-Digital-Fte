@@ -208,6 +208,21 @@ export interface MonetizationStatus {
   note: string
 }
 
+export interface BillingSubscription {
+  status: 'none' | 'trial' | 'active' | 'past_due' | 'canceled'
+  current_period_end: string | null
+}
+
+export interface BillingEvent {
+  id: string
+  event_type: string
+  old_tier: string | null
+  new_tier: string | null
+  subscription_status: string | null
+  details: Record<string, unknown> | null
+  created_at: string
+}
+
 export interface BillingSummary {
   current_plan: string
   current_plan_display: string
@@ -219,4 +234,5 @@ export interface BillingSummary {
   next_plan: BillingPlan | null
   monetization_status: MonetizationStatus
   available_plans: BillingPlan[]
+  subscription: BillingSubscription
 }

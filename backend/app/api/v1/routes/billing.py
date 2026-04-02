@@ -12,10 +12,13 @@ write — no payment processing.  Stripe integration is a future phase.
 from __future__ import annotations
 
 import logging
+import uuid
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.billing.plans import PLANS, PlanTier, get_plan
@@ -132,16 +135,31 @@ async def update_billing_plan(
 
     from sqlalchemy import text as sa_text
 
+    old_tier = getattr(admin, "plan_tier", "free") or "free"
+
     await db.execute(
         sa_text("UPDATE users SET plan_tier = :tier WHERE id = :uid"),
         {"tier": new_tier.value, "uid": admin.id},
     )
+
+    # Audit — record billing event
+    from app.models.billing_event import BillingEvent
+    event_type = "plan_activated" if old_tier == "free" and new_tier.value != "free" else "plan_changed"
+    db.add(BillingEvent(
+        id=str(uuid.uuid4()),
+        user_id=admin.id,
+        event_type=event_type,
+        old_tier=old_tier,
+        new_tier=new_tier.value,
+        subscription_status=getattr(admin, "subscription_status", "none") or "none",
+        details={"source": "admin_ui", "demo_mode": True},
+    ))
     await db.commit()
 
     logger.info(
         "Plan updated | user_id=%s old=%s new=%s",
         admin.id,
-        getattr(admin, "plan_tier", "unknown"),
+        old_tier,
         new_tier.value,
     )
     plan = get_plan(new_tier)
@@ -212,4 +230,170 @@ async def get_billing_summary(
             ),
         },
         "available_plans": [_plan_to_dict(p) for p in PLANS.values()],
+        "subscription": {
+            "status": getattr(admin, "subscription_status", "none") or "none",
+            "current_period_end": (
+                getattr(admin, "current_period_end", None).isoformat()
+                if getattr(admin, "current_period_end", None) else None
+            ),
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
+# GET /status  — lightweight subscription status (no usage counters)
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/status",
+    summary="Subscription status for the authenticated admin",
+)
+async def get_billing_status(
+    admin=Depends(require_admin),
+) -> Dict[str, Any]:
+    """Return the current subscription lifecycle status for this admin user.
+
+    Lighter than /summary — returns only plan tier and subscription fields.
+    Useful for header badges and gate checks without fetching full usage data.
+    """
+    raw_tier = getattr(admin, "plan_tier", None) or "free"
+    try:
+        current_tier = PlanTier(raw_tier)
+    except ValueError:
+        current_tier = PlanTier.FREE
+
+    return {
+        "plan_tier": current_tier.value,
+        "plan_display": get_plan(current_tier).display_name,
+        "subscription_status": getattr(admin, "subscription_status", "none") or "none",
+        "current_period_end": (
+            getattr(admin, "current_period_end", None).isoformat()
+            if getattr(admin, "current_period_end", None) else None
+        ),
+        "stripe_enabled": False,
+    }
+
+
+# ---------------------------------------------------------------------------
+# GET /events  — billing event log (preferred name; /history kept as alias)
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/events",
+    summary="Recent billing events for the authenticated admin (read-only)",
+)
+async def get_billing_events(
+    admin=Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+    limit: int = 20,
+) -> Dict[str, Any]:
+    """Return the most recent billing lifecycle events for this user.
+
+    Canonical endpoint.  /history is kept as an alias for backwards compatibility.
+    """
+    from app.models.billing_event import BillingEvent
+
+    result = await db.execute(
+        select(BillingEvent)
+        .where(BillingEvent.user_id == admin.id)
+        .order_by(BillingEvent.created_at.desc())
+        .limit(max(1, min(limit, 100)))
+    )
+    events = result.scalars().all()
+
+    return {
+        "events": [
+            {
+                "id": e.id,
+                "event_type": e.event_type,
+                "old_tier": e.old_tier,
+                "new_tier": e.new_tier,
+                "subscription_status": e.subscription_status,
+                "details": e.details,
+                "created_at": e.created_at.isoformat(),
+            }
+            for e in events
+        ],
+        "total": len(events),
+    }
+
+
+# ---------------------------------------------------------------------------
+# GET /history  — alias kept for backwards compatibility with existing api.ts
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/history",
+    summary="Recent billing events for the authenticated admin (read-only)",
+    include_in_schema=False,
+)
+async def get_billing_history(
+    admin=Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+    limit: int = 20,
+) -> Dict[str, Any]:
+    """Alias of GET /events — kept for backwards compatibility."""
+    return await get_billing_events(admin=admin, db=db, limit=limit)
+
+
+# ---------------------------------------------------------------------------
+# POST /checkout-session  (stub — Stripe not yet enabled)
+# ---------------------------------------------------------------------------
+
+class CheckoutSessionRequest(BaseModel):
+    plan_tier: str  # "pro" | "team"
+
+
+@router.post(
+    "/checkout-session",
+    summary="Create a Stripe checkout session (stub — returns 503 until Stripe is configured)",
+)
+async def create_checkout_session(
+    body: CheckoutSessionRequest,
+    admin=Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> Dict[str, Any]:
+    """Stripe checkout session endpoint — NOT yet active.
+
+    When Stripe is configured (STRIPE_SECRET_KEY env var set), this endpoint
+    will create a real Checkout Session and return the redirect URL.
+
+    For now it records the intent as a billing_event and returns a clear
+    "not enabled" response so the UI can show an appropriate message.
+    """
+    try:
+        PlanTier(body.plan_tier.lower())
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid plan_tier '{body.plan_tier}'",
+        )
+
+    # Record the checkout intent for audit purposes
+    from app.models.billing_event import BillingEvent
+    db.add(BillingEvent(
+        id=str(uuid.uuid4()),
+        user_id=admin.id,
+        event_type="checkout_requested",
+        old_tier=getattr(admin, "plan_tier", "free") or "free",
+        new_tier=body.plan_tier.lower(),
+        subscription_status=getattr(admin, "subscription_status", "none") or "none",
+        details={"stripe_enabled": False, "requested_tier": body.plan_tier.lower()},
+    ))
+    await db.commit()
+
+    logger.info(
+        "Checkout session requested (stub) | user_id=%s tier=%s",
+        admin.id, body.plan_tier,
+    )
+
+    return {
+        "enabled": False,
+        "checkout_url": None,
+        "message": (
+            "Stripe billing is not yet active. "
+            "Use PATCH /admin/billing/plan to assign a plan tier directly (demo mode). "
+            "This request has been logged as a billing event."
+        ),
+        "next_step": "Configure STRIPE_SECRET_KEY and implement webhook handlers to enable live checkout.",
     }

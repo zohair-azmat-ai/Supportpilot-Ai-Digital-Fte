@@ -810,6 +810,25 @@ _PATCHES = [
     """,
 
     # =========================================================================
+    # users — Stripe-ready subscription fields (Phase 6 billing foundation)
+    # =========================================================================
+
+    # subscription_status — lifecycle state driven by Stripe webhooks when live.
+    # Values: none | trial | active | past_due | canceled
+    # DEFAULT 'none' safely backfills all existing rows.
+    """
+    ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS subscription_status VARCHAR(50) DEFAULT 'none'
+    """,
+
+    # current_period_end — end of the current billing period (from Stripe).
+    # NULL until Stripe is activated; nullable so existing rows are unaffected.
+    """
+    ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS current_period_end TIMESTAMPTZ
+    """,
+
+    # =========================================================================
     # conversations — human handoff mode (Phase 6)
     # =========================================================================
 

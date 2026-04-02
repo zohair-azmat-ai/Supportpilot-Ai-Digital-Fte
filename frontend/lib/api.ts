@@ -16,6 +16,7 @@ import {
   Role,
   BillingSummary,
   BillingPlan,
+  BillingEvent,
   QueueItem,
 } from '../types'
 
@@ -302,6 +303,16 @@ export const billingApi = {
 
   updatePlan: async (planTier: string): Promise<{ updated: boolean; plan_tier: string; plan_detail: BillingPlan }> => {
     const res = await api.patch('/admin/billing/plan', { plan_tier: planTier })
+    return res.data
+  },
+
+  getHistory: async (): Promise<{ events: BillingEvent[]; total: number }> => {
+    const res = await api.get('/admin/billing/history')
+    return res.data
+  },
+
+  startCheckout: async (planTier: string): Promise<{ enabled: boolean; checkout_url: string | null; message: string }> => {
+    const res = await api.post('/admin/billing/checkout-session', { plan_tier: planTier })
     return res.data
   },
 }

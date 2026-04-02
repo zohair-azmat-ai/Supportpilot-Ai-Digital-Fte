@@ -8,6 +8,7 @@ from app.models.customer import Customer, CustomerIdentifier
 from app.models.knowledge_base import KnowledgeBase
 from app.models.agent_metrics import AgentMetrics
 from app.models.system_event import SystemEvent
+from app.models.billing_event import BillingEvent
 
 __all__ = [
     "User",
@@ -19,4 +20,5 @@ __all__ = [
     "KnowledgeBase",
     "AgentMetrics",
     "SystemEvent",
+    "BillingEvent",
 ]
