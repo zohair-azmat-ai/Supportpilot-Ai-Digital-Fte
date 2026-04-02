@@ -13,6 +13,9 @@ openai==1.50.2
 python-dotenv==1.0.1
 httpx==0.27.2
 
+# ── Stripe billing integration ───────────────────────────────────────────────
+stripe==10.12.0
+
 # ── Gmail integration ────────────────────────────────────────────────────────
 # Required when GMAIL_ENABLED=true
 google-api-python-client==2.151.0

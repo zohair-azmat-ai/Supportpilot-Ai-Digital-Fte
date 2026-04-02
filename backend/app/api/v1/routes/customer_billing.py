@@ -3,7 +3,7 @@ Customer-facing billing endpoints.
 
 GET   /billing/summary  — current user's plan, per-user usage, subscription status
 GET   /billing/events   — current user's billing event history
-POST  /billing/checkout-session — checkout intent stub (Stripe not yet live)
+POST  /billing/checkout-session — real Stripe checkout (falls back to stub when not configured)
 
 These mirror the /admin/billing/* routes but are accessible to any authenticated
 user (not just admins) and return per-user usage instead of platform-wide totals.
@@ -22,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.billing.plans import PLANS, PlanTier, get_plan
+from app.billing.stripe_helpers import create_checkout_session as _stripe_checkout
 from app.billing.usage_meter import usage_meter
 from app.core.deps import get_current_active_user, get_db
 
@@ -163,17 +164,17 @@ class CheckoutRequest(BaseModel):
 
 @router.post(
     "/checkout-session",
-    summary="Request a Stripe checkout session (stub — not yet live)",
+    summary="Create a Stripe checkout session (live when STRIPE_SECRET_KEY is set)",
 )
 async def customer_checkout_session(
     body: CheckoutRequest,
     current_user=Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
-    """Stub endpoint — records checkout intent and returns a coming-soon message.
+    """Create a Stripe Checkout Session for the selected plan.
 
-    When Stripe goes live this will create a real Checkout Session and return
-    the redirect URL.
+    Live when ``STRIPE_SECRET_KEY`` is configured; falls back to stub otherwise.
+    Returns ``400`` for the free plan, ``422`` for an unrecognised tier.
     """
     try:
         new_tier = PlanTier(body.plan_tier.lower())
@@ -181,6 +182,12 @@ async def customer_checkout_session(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Invalid plan_tier '{body.plan_tier}'. Must be one of: free, pro, team",
+        )
+
+    if new_tier == PlanTier.FREE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot create a checkout session for the Free plan.",
         )
 
     from app.models.billing_event import BillingEvent
@@ -195,13 +202,17 @@ async def customer_checkout_session(
     ))
     await db.commit()
 
+    try:
+        result = await _stripe_checkout(current_user, new_tier, db)
+    except Exception:
+        logger.exception("Customer checkout session creation failed | user_id=%s", current_user.id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to create Stripe checkout session. Please try again.",
+        )
+
     logger.info(
-        "Checkout requested | user_id=%s plan=%s",
-        current_user.id,
-        new_tier.value,
+        "Customer checkout | user_id=%s tier=%s enabled=%s",
+        current_user.id, new_tier.value, result.get("enabled"),
     )
-    return {
-        "enabled": False,
-        "checkout_url": None,
-        "message": f"Stripe checkout is coming soon. Your interest in the {new_tier.value.title()} plan has been noted!",
-    }
+    return result

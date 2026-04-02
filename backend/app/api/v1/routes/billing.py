@@ -21,8 +21,16 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from fastapi import Request
+
 from app.billing.plans import PLANS, PlanTier, get_plan
+from app.billing.stripe_helpers import (
+    create_checkout_session as _stripe_checkout,
+    price_id_to_plan_tier,
+    unix_to_datetime,
+)
 from app.billing.usage_meter import usage_meter
+from app.core.config import settings
 from app.core.deps import get_db, require_admin
 
 logger = logging.getLogger(__name__)
@@ -346,54 +354,237 @@ class CheckoutSessionRequest(BaseModel):
 
 @router.post(
     "/checkout-session",
-    summary="Create a Stripe checkout session (stub — returns 503 until Stripe is configured)",
+    summary="Create a Stripe checkout session (live when STRIPE_SECRET_KEY is set)",
 )
 async def create_checkout_session(
     body: CheckoutSessionRequest,
     admin=Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
-    """Stripe checkout session endpoint — NOT yet active.
+    """Create a Stripe Checkout Session for the selected plan.
 
-    When Stripe is configured (STRIPE_SECRET_KEY env var set), this endpoint
-    will create a real Checkout Session and return the redirect URL.
+    When ``STRIPE_SECRET_KEY`` is set in the environment a real Stripe session
+    is created and the ``checkout_url`` redirect link is returned.
 
-    For now it records the intent as a billing_event and returns a clear
-    "not enabled" response so the UI can show an appropriate message.
+    When Stripe is not configured the endpoint falls back to stub behaviour:
+    it records the intent as a billing event and returns ``enabled: false``.
+
+    Returns ``400`` for the free plan (no checkout needed) and ``422`` for an
+    unrecognised tier.
     """
     try:
-        PlanTier(body.plan_tier.lower())
+        new_tier = PlanTier(body.plan_tier.lower())
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Invalid plan_tier '{body.plan_tier}'",
+            detail=f"Invalid plan_tier '{body.plan_tier}'. Must be one of: free, pro, team",
         )
 
-    # Record the checkout intent for audit purposes
+    if new_tier == PlanTier.FREE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot create a checkout session for the Free plan.",
+        )
+
+    # Always record the checkout intent for audit purposes
     from app.models.billing_event import BillingEvent
     db.add(BillingEvent(
         id=str(uuid.uuid4()),
         user_id=admin.id,
         event_type="checkout_requested",
         old_tier=getattr(admin, "plan_tier", "free") or "free",
-        new_tier=body.plan_tier.lower(),
+        new_tier=new_tier.value,
         subscription_status=getattr(admin, "subscription_status", "none") or "none",
-        details={"stripe_enabled": False, "requested_tier": body.plan_tier.lower()},
+        details={"source": "admin_ui", "requested_tier": new_tier.value},
     ))
     await db.commit()
 
-    logger.info(
-        "Checkout session requested (stub) | user_id=%s tier=%s",
-        admin.id, body.plan_tier,
-    )
+    try:
+        result = await _stripe_checkout(admin, new_tier, db)
+    except Exception as exc:
+        logger.exception("Checkout session creation failed | user_id=%s", admin.id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to create Stripe checkout session. Please try again.",
+        ) from exc
 
-    return {
-        "enabled": False,
-        "checkout_url": None,
-        "message": (
-            "Stripe billing is not yet active. "
-            "Use PATCH /admin/billing/plan to assign a plan tier directly (demo mode). "
-            "This request has been logged as a billing event."
-        ),
-        "next_step": "Configure STRIPE_SECRET_KEY and implement webhook handlers to enable live checkout.",
-    }
+    logger.info(
+        "Checkout | user_id=%s tier=%s enabled=%s",
+        admin.id, new_tier.value, result.get("enabled"),
+    )
+    return result
+
+
+# ---------------------------------------------------------------------------
+# POST /webhook  — Stripe webhook receiver
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/webhook",
+    summary="Stripe webhook receiver",
+    include_in_schema=False,  # not a user-facing endpoint
+)
+async def stripe_webhook(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> Dict[str, Any]:
+    """Receive and verify Stripe webhook events.
+
+    Handled event types:
+      - ``checkout.session.completed``    — activate subscription on the user
+      - ``customer.subscription.updated`` — sync status / period / tier changes
+      - ``customer.subscription.deleted`` — mark subscription as canceled
+
+    Stripe signature is verified using ``STRIPE_WEBHOOK_SECRET``.
+    Returns 400 on invalid signature so Stripe knows to retry.
+    """
+    if not settings.STRIPE_WEBHOOK_SECRET:
+        logger.warning("Stripe webhook received but STRIPE_WEBHOOK_SECRET is not set — ignoring")
+        return {"received": True}
+
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature", "")
+
+    try:
+        import stripe  # local import — missing package only fails here
+        stripe.api_key = settings.STRIPE_SECRET_KEY
+        event = stripe.Webhook.construct_event(payload, sig_header, settings.STRIPE_WEBHOOK_SECRET)
+    except Exception as exc:
+        logger.warning("Stripe webhook signature verification failed: %s", exc)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid Stripe signature")
+
+    event_type: str = event["type"]
+    data_obj = event["data"]["object"]
+    logger.info("Stripe webhook | type=%s id=%s", event_type, event.get("id"))
+
+    from app.models.billing_event import BillingEvent
+    from app.models.user import User
+    from sqlalchemy import select as sa_select, text as sa_text
+
+    # ------------------------------------------------------------------
+    # checkout.session.completed
+    # ------------------------------------------------------------------
+    if event_type == "checkout.session.completed":
+        user_id: Optional[str] = data_obj.get("client_reference_id")
+        stripe_customer_id: str = data_obj.get("customer", "")
+        stripe_sub_id: Optional[str] = data_obj.get("subscription")
+        plan_tier_value: Optional[str] = (data_obj.get("metadata") or {}).get("plan_tier")
+
+        if not user_id:
+            logger.warning("checkout.session.completed: no client_reference_id — skipping")
+            return {"received": True}
+
+        # Update user row
+        updates: Dict[str, Any] = {
+            "subscription_status": "active",
+            "stripe_customer_id": stripe_customer_id,
+        }
+        if stripe_sub_id:
+            updates["stripe_subscription_id"] = stripe_sub_id
+        if plan_tier_value:
+            updates["plan_tier"] = plan_tier_value
+
+        set_clause = ", ".join(f"{k} = :{k}" for k in updates)
+        updates["uid"] = user_id
+        await db.execute(
+            sa_text(f"UPDATE users SET {set_clause} WHERE id = :uid"),
+            updates,
+        )
+
+        db.add(BillingEvent(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            event_type="subscription_activated",
+            new_tier=plan_tier_value,
+            subscription_status="active",
+            details={"stripe_session_id": data_obj.get("id"), "stripe_customer_id": stripe_customer_id},
+        ))
+        await db.commit()
+        logger.info("checkout.session.completed processed | user_id=%s plan=%s", user_id, plan_tier_value)
+
+    # ------------------------------------------------------------------
+    # customer.subscription.updated
+    # ------------------------------------------------------------------
+    elif event_type == "customer.subscription.updated":
+        stripe_customer_id = data_obj.get("customer", "")
+        sub_status: str = data_obj.get("status", "active")
+        period_end_ts: Optional[int] = data_obj.get("current_period_end")
+        period_end_dt = unix_to_datetime(period_end_ts)
+
+        # Reverse-map price ID to plan tier
+        items_data = (data_obj.get("items") or {}).get("data") or []
+        price_id = (items_data[0].get("price") or {}).get("id") if items_data else None
+        new_plan = price_id_to_plan_tier(price_id) if price_id else None
+
+        result = await db.execute(
+            sa_select(User).where(User.stripe_customer_id == stripe_customer_id)
+        )
+        user = result.scalar_one_or_none()
+        if not user:
+            logger.warning("subscription.updated: no user found for customer_id=%s", stripe_customer_id)
+            return {"received": True}
+
+        updates = {
+            "subscription_status": sub_status,
+            "stripe_subscription_id": data_obj.get("id"),
+        }
+        if period_end_dt:
+            updates["current_period_end"] = period_end_dt.isoformat()
+        if new_plan:
+            updates["plan_tier"] = new_plan
+
+        set_clause = ", ".join(f"{k} = :{k}" for k in updates)
+        updates["uid"] = user.id
+        await db.execute(
+            sa_text(f"UPDATE users SET {set_clause} WHERE id = :uid"),
+            updates,
+        )
+
+        db.add(BillingEvent(
+            id=str(uuid.uuid4()),
+            user_id=user.id,
+            event_type="subscription_updated",
+            new_tier=new_plan,
+            subscription_status=sub_status,
+            details={"stripe_subscription_id": data_obj.get("id"), "price_id": price_id},
+        ))
+        await db.commit()
+        logger.info("subscription.updated processed | user_id=%s status=%s", user.id, sub_status)
+
+    # ------------------------------------------------------------------
+    # customer.subscription.deleted
+    # ------------------------------------------------------------------
+    elif event_type == "customer.subscription.deleted":
+        stripe_customer_id = data_obj.get("customer", "")
+
+        result = await db.execute(
+            sa_select(User).where(User.stripe_customer_id == stripe_customer_id)
+        )
+        user = result.scalar_one_or_none()
+        if not user:
+            logger.warning("subscription.deleted: no user found for customer_id=%s", stripe_customer_id)
+            return {"received": True}
+
+        await db.execute(
+            sa_text(
+                "UPDATE users SET subscription_status = 'canceled', "
+                "stripe_subscription_id = NULL, current_period_end = NULL WHERE id = :uid"
+            ),
+            {"uid": user.id},
+        )
+
+        db.add(BillingEvent(
+            id=str(uuid.uuid4()),
+            user_id=user.id,
+            event_type="subscription_canceled",
+            old_tier=getattr(user, "plan_tier", None),
+            subscription_status="canceled",
+            details={"stripe_subscription_id": data_obj.get("id")},
+        ))
+        await db.commit()
+        logger.info("subscription.deleted processed | user_id=%s", user.id)
+
+    else:
+        logger.debug("Stripe webhook | unhandled event type=%s — acknowledged", event_type)
+
+    return {"received": True}

@@ -838,6 +838,26 @@ _PATCHES = [
     ALTER TABLE conversations
         ADD COLUMN IF NOT EXISTS handoff_mode VARCHAR(20) DEFAULT 'ai'
     """,
+
+    # =========================================================================
+    # users — Stripe identifiers (populated on first checkout)
+    # =========================================================================
+
+    # stripe_customer_id — Stripe cus_... ID; null until user completes checkout.
+    """
+    ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS stripe_customer_id VARCHAR(100)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_users_stripe_customer_id
+        ON users (stripe_customer_id)
+    """,
+
+    # stripe_subscription_id — Stripe sub_... ID; null until subscription is active.
+    """
+    ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS stripe_subscription_id VARCHAR(100)
+    """,
 ]
 
 

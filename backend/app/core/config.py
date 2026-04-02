@@ -60,6 +60,23 @@ class Settings(BaseSettings):
     TWILIO_WHATSAPP_FROM: str = "whatsapp:+14155238886"
     TWILIO_WHATSAPP_STATUS_CALLBACK: str = ""
 
+    # ── Stripe billing ───────────────────────────────────────────────────────
+    # Leave blank to keep the app in demo/stub mode (no real charges).
+    # Set all four to activate live Stripe checkout:
+    #   STRIPE_SECRET_KEY        sk_live_... or sk_test_...
+    #   STRIPE_WEBHOOK_SECRET    whsec_...  (from Stripe dashboard → Webhooks)
+    #   STRIPE_PRICE_ID_PRO      price_...  (monthly recurring price for Pro plan)
+    #   STRIPE_PRICE_ID_TEAM     price_...  (monthly recurring price for Team plan)
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
+    STRIPE_PRICE_ID_PRO: str = ""
+    STRIPE_PRICE_ID_TEAM: str = ""
+    # Publishable key — safe to expose to the browser (used by frontend Stripe.js)
+    NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: str = ""
+    # Redirect URLs after checkout (override in production with your real domain)
+    STRIPE_SUCCESS_URL: str = "http://localhost:3000/billing?checkout=success"
+    STRIPE_CANCEL_URL: str = "http://localhost:3000/billing"
+
     # App
     ENVIRONMENT: str = "development"
     APP_TITLE: str = "SupportPilot AI"

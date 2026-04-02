@@ -48,6 +48,14 @@ class User(Base):
         DateTime(timezone=True), nullable=True
     )
 
+    # Stripe identifiers — populated on first checkout, null until Stripe is activated.
+    stripe_customer_id: Mapped[Optional[str]] = mapped_column(
+        String(100), nullable=True, index=True
+    )
+    stripe_subscription_id: Mapped[Optional[str]] = mapped_column(
+        String(100), nullable=True
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
