@@ -778,45 +778,28 @@ export default function BillingPage() {
         </div>
 
         {history.length === 0 ? (
-          <div className="rounded-xl border border-border bg-background-surface px-6 py-10 text-center">
+          <div className="rounded-xl border border-border bg-background-surface px-6 py-8 text-center">
             <p className="text-sm text-slate-500">No billing events yet.</p>
             <p className="text-xs text-slate-600 mt-1">Events are recorded when you change plans or request checkout.</p>
           </div>
         ) : (
-          <div className="rounded-xl border border-border bg-background-surface overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Event</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Plan change</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.slice(0, 10).map((evt, i) => {
-                  const cfg = EVENT_TYPE_CFG[evt.event_type] ?? { label: evt.event_type, cls: 'text-slate-400' }
-                  return (
-                    <tr key={evt.id} className={i % 2 === 0 ? 'bg-background-elevated/40' : ''}>
-                      <td className={`px-4 py-3 font-medium ${cfg.cls}`}>{cfg.label}</td>
-                      <td className="px-4 py-3 text-slate-500">
-                        {evt.old_tier || evt.new_tier ? (
-                          <span>
-                            {evt.old_tier ?? '—'}
-                            {' → '}
-                            <span className="text-slate-300">{evt.new_tier ?? '—'}</span>
-                          </span>
-                        ) : (
-                          <span className="text-slate-600">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right text-slate-500 tabular-nums">
-                        {formatEventDate(evt.created_at)}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+          <div className="rounded-xl border border-border bg-background-surface divide-y divide-border">
+            {history.slice(0, 10).map((evt) => {
+              const cfg = EVENT_TYPE_CFG[evt.event_type] ?? { label: evt.event_type, cls: 'text-slate-400' }
+              return (
+                <div key={evt.id} className="flex items-center justify-between px-4 py-3 gap-4">
+                  <span className={`text-sm font-medium ${cfg.cls}`}>{cfg.label}</span>
+                  {(evt.new_tier || evt.old_tier) && (
+                    <span className="text-xs text-slate-500">
+                      {evt.old_tier ?? '—'}{' → '}<span className="text-slate-300">{evt.new_tier ?? '—'}</span>
+                    </span>
+                  )}
+                  <span className="ml-auto shrink-0 text-xs text-slate-600 tabular-nums">
+                    {formatEventDate(evt.created_at)}
+                  </span>
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
