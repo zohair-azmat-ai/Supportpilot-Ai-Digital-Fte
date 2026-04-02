@@ -182,9 +182,9 @@ function UpgradeModal({
         <div className="mx-6 mb-4 flex items-start gap-2.5 rounded-xl border border-amber-500/20 bg-amber-500/8 p-3">
           <Info size={14} className="shrink-0 mt-0.5 text-amber-400" />
           <p className="text-xs text-slate-400">
-            <span className="font-semibold text-amber-300">Demo mode — </span>
-            No payment required. This updates your plan tier directly in the DB.
-            Stripe billing integration is the next phase.
+            <span className="font-semibold text-indigo-300">Stripe checkout — </span>
+            You will be redirected to Stripe to complete payment. When Stripe credentials
+            are not configured, the request is logged and no charge is made.
           </p>
         </div>
 
@@ -206,7 +206,7 @@ function UpgradeModal({
             ) : (
               <ArrowRight size={14} />
             )}
-            {loading ? 'Activating…' : `Activate ${plan.display_name}`}
+            {loading ? 'Redirecting…' : `Upgrade to ${plan.display_name}`}
           </button>
         </div>
       </div>
@@ -473,27 +473,40 @@ export default function BillingPage() {
   }
 
   const handleUpgradeConfirm = async (tier: string) => {
-    console.log('checkout_clicked', tier)
     setUpgrading(true)
     try {
-      // Record checkout intent + surface "Stripe coming soon" message
-      const checkoutRes = await billingApi.startCheckout(tier).catch(() => null)
-      if (checkoutRes) toast.info(checkoutRes.message)
-      // Demo: directly update plan tier in DB (no payment required)
-      await billingApi.updatePlan(tier)
-      toast.success(`Plan activated: ${tier.charAt(0).toUpperCase() + tier.slice(1)} (demo mode)`)
-      setUpgradeTarget(null)
-      await fetchData()
+      const res = await billingApi.startCheckout(tier)
+      if (res.checkout_url) {
+        window.location.href = res.checkout_url
+      } else {
+        // Stripe not configured — stub/demo mode
+        toast.info(res.message)
+        setUpgradeTarget(null)
+        await fetchData()
+      }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Upgrade failed'
+      const msg = err instanceof Error ? err.message : 'Checkout request failed'
       toast.error(msg)
-    } finally {
       setUpgrading(false)
     }
+    // Note: don't clear setUpgrading(false) on success path — page is redirecting
   }
 
   useEffect(() => {
     fetchData()
+  }, [])
+
+  // Detect Stripe redirect-back query params
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('checkout') === 'success') {
+      toast.success('Payment successful! Your plan is being activated.')
+      fetchData()
+      window.history.replaceState({}, '', window.location.pathname)
+    } else if (params.get('checkout') === 'cancel') {
+      toast.info('Checkout cancelled. No changes were made.')
+      window.history.replaceState({}, '', window.location.pathname)
+    }
   }, [])
 
   if (loading) return <LoadingSpinner center size="lg" label="Loading billing data..." />

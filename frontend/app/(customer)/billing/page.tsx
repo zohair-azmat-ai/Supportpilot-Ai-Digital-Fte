@@ -259,19 +259,35 @@ export default function CustomerBillingPage() {
     setUpgrading(true)
     try {
       const res = await customerBillingApi.startCheckout(tier)
-      toast.info(res.message)
-      // Refresh events so the checkout_requested event appears
-      customerBillingApi.getEvents()
-        .then((e) => setEvents(e.events))
-        .catch(() => {})
+      if (res.checkout_url) {
+        window.location.href = res.checkout_url
+      } else {
+        // Stripe not configured — stub/demo mode
+        toast.info(res.message)
+        customerBillingApi.getEvents().then((e) => setEvents(e.events)).catch(() => {})
+        setUpgrading(false)
+      }
     } catch {
       toast.error('Request failed. Please try again.')
-    } finally {
       setUpgrading(false)
     }
+    // Note: don't clear upgrading on success path — page is redirecting
   }
 
   useEffect(() => { fetchData() }, [])
+
+  // Detect Stripe redirect-back query params
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('checkout') === 'success') {
+      toast.success('Payment successful! Your subscription is being activated.')
+      fetchData()
+      window.history.replaceState({}, '', window.location.pathname)
+    } else if (params.get('checkout') === 'cancel') {
+      toast.info('Checkout cancelled. No changes were made.')
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [])
 
   if (loading) return <LoadingSpinner center size="lg" label="Loading subscription..." />
 
