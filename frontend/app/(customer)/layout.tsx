@@ -9,6 +9,7 @@ import {
   Ticket,
   HeadphonesIcon,
   Settings,
+  CreditCard,
 } from 'lucide-react'
 import { DashboardLayout } from '../../components/layout/DashboardLayout'
 import { useAuth } from '../../hooks/useAuth'
@@ -20,6 +21,7 @@ const navItems = [
   { label: 'Conversations', href: '/chat', icon: MessageCircle },
   { label: 'My Tickets', href: '/tickets', icon: Ticket },
   { label: 'Submit Request', href: '/support', icon: HeadphonesIcon },
+  { label: 'Subscription', href: '/billing', icon: CreditCard },
   { label: 'Settings', href: '/settings', icon: Settings },
 ]
 

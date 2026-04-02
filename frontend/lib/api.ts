@@ -317,6 +317,23 @@ export const billingApi = {
   },
 }
 
+export const customerBillingApi = {
+  getSummary: async (): Promise<BillingSummary> => {
+    const res = await api.get('/billing/summary')
+    return res.data
+  },
+
+  getEvents: async (): Promise<{ events: BillingEvent[]; total: number }> => {
+    const res = await api.get('/billing/events')
+    return res.data
+  },
+
+  startCheckout: async (planTier: string): Promise<{ enabled: boolean; checkout_url: string | null; message: string }> => {
+    const res = await api.post('/billing/checkout-session', { plan_tier: planTier })
+    return res.data
+  },
+}
+
 export const aiApi = {
   getSuggestions: async (message: string): Promise<{ suggestions: string[] }> => {
     const res = await api.post('/ai/suggestions', { message })
