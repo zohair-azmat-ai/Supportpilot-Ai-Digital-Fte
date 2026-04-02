@@ -71,6 +71,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     else:
         logger.info("Twilio WhatsApp integration not configured; webhook stays disabled")
 
+    # Stripe config diagnostics — logs price IDs (not the secret key value)
+    sk = settings.STRIPE_SECRET_KEY or ""
+    logger.info(
+        "Stripe config | secret_key_set=%s secret_key_prefix=%s | "
+        "STRIPE_PRICE_ID_PRO=%r | STRIPE_PRICE_ID_TEAM=%r",
+        bool(sk),
+        sk[:7] if sk else "—",
+        settings.STRIPE_PRICE_ID_PRO or "(not set)",
+        settings.STRIPE_PRICE_ID_TEAM or "(not set)",
+    )
+
     yield  # Application is running
 
     # Stop Gmail poller
