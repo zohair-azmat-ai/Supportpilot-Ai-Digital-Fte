@@ -317,4 +317,11 @@ export const billingApi = {
   },
 }
 
+export const aiApi = {
+  getSuggestions: async (message: string): Promise<{ suggestions: string[] }> => {
+    const res = await api.post('/ai/suggestions', { message })
+    return res.data
+  },
+}
+
 export default api

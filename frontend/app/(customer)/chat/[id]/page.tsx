@@ -8,7 +8,7 @@ import {
   Cpu, Headphones, Layers3, Send, Tag,
 } from 'lucide-react'
 import { useConversationDetail } from '../../../../hooks/useConversations'
-import { adminApi, messagesApi } from '../../../../lib/api'
+import { adminApi, messagesApi, aiApi } from '../../../../lib/api'
 import { useAuth } from '../../../../hooks/useAuth'
 import { ConversationInsight, Message } from '../../../../types'
 import { ChatWindow } from '../../../../components/chat/ChatWindow'
@@ -189,6 +189,8 @@ export default function ChatDetailPage() {
   const [handoffLoading, setHandoffLoading] = useState(false)
   const [adminReply, setAdminReply] = useState('')
   const [adminSending, setAdminSending] = useState(false)
+  const [suggestions, setSuggestions] = useState<string[]>([])
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false)
   const pendingUserMsg = useRef<Message | null>(null)
   const toast = useToast()
   const { user } = useAuth()
@@ -241,6 +243,7 @@ export default function ChatDetailPage() {
     if (!conversation) return
     setAiLoading(true)
     setStreamingContent(null)
+    setSuggestions([])
     pendingUserMsg.current = null
 
     console.log('[stream] starting for conversation', id)
@@ -265,6 +268,12 @@ export default function ChatDetailPage() {
           setStreamingContent(null)
           setAiLoading(false)
           addAiMessage(aiMsg)
+          // Fetch smart reply suggestions based on the user's message (non-blocking)
+          setSuggestionsLoading(true)
+          aiApi.getSuggestions(content)
+            .then((res) => setSuggestions(res.suggestions.slice(0, 3)))
+            .catch(() => {/* suggestions are non-critical — fail silently */})
+            .finally(() => setSuggestionsLoading(false))
         },
         onError: (errMsg) => {
           console.error('[stream] error event:', errMsg)
@@ -279,6 +288,11 @@ export default function ChatDetailPage() {
       setAiLoading(false)
       toast.error('Streaming failed. Please try again.')
     }
+  }
+
+  const handleSuggestionClick = (text: string) => {
+    setSuggestions([])
+    handleSend(text)
   }
 
   if (loading) {
@@ -492,11 +506,37 @@ export default function ChatDetailPage() {
           </div>
         </div>
       ) : (
-        <ChatInput
-          onSend={handleSend}
-          disabled={aiLoading || streamingContent !== null || conversation.status === 'closed'}
-          placeholder={conversation.status === 'closed' ? 'This conversation is closed' : 'Type your message...'}
-        />
+        <>
+          <ChatInput
+            onSend={handleSend}
+            disabled={aiLoading || streamingContent !== null || conversation.status === 'closed'}
+            placeholder={conversation.status === 'closed' ? 'This conversation is closed' : 'Type your message...'}
+          />
+          {/* Smart reply suggestions */}
+          {(suggestionsLoading || suggestions.length > 0) && conversation.status !== 'closed' && (
+            <div className="flex flex-wrap gap-2 px-4 pb-3 pt-1">
+              {suggestionsLoading ? (
+                [110, 140, 118].map((w, i) => (
+                  <div
+                    key={i}
+                    className="h-7 animate-pulse rounded-full bg-white/5"
+                    style={{ width: w }}
+                  />
+                ))
+              ) : (
+                suggestions.map((s, i) => (
+                  <button
+                    key={i}
+                    onClick={() => handleSuggestionClick(s)}
+                    className="rounded-full border border-indigo-500/30 bg-indigo-500/10 px-3 py-1 text-xs font-medium text-indigo-300 transition-colors hover:border-indigo-500/60 hover:bg-indigo-500/20 hover:text-indigo-200 active:scale-95"
+                  >
+                    {s}
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </>
       )}
     </div>
   )
