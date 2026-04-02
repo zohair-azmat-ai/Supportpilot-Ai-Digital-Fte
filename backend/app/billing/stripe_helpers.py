@@ -148,15 +148,16 @@ async def create_checkout_session(
     try:
         customer_id = await get_or_create_stripe_customer(user, db)
 
+        user_id_str = str(user.id)  # Stripe requires string values
         session = await anyio.to_thread.run_sync(
             lambda: stripe.checkout.Session.create(
                 customer=customer_id,
-                client_reference_id=user.id,  # used in webhook to find the user
+                client_reference_id=user_id_str,  # used in webhook to find the user
                 mode="subscription",
                 line_items=[{"price": price_id, "quantity": 1}],
                 success_url=settings.STRIPE_SUCCESS_URL,
                 cancel_url=settings.STRIPE_CANCEL_URL,
-                metadata={"user_id": user.id, "plan_tier": tier.value},
+                metadata={"user_id": user_id_str, "plan_tier": tier.value},
             )
         )
     except Exception as exc:

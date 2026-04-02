@@ -470,14 +470,30 @@ async def stripe_webhook(
     # checkout.session.completed
     # ------------------------------------------------------------------
     if event_type == "checkout.session.completed":
-        user_id: Optional[str] = data_obj.get("client_reference_id")
+        metadata: Dict[str, Any] = data_obj.get("metadata") or {}
+        # Prefer client_reference_id (set explicitly at session creation);
+        # fall back to metadata.user_id for sessions created before this fix.
+        user_id: Optional[str] = (
+            data_obj.get("client_reference_id")
+            or metadata.get("user_id")
+            or None
+        )
         stripe_customer_id: str = data_obj.get("customer", "")
         stripe_sub_id: Optional[str] = data_obj.get("subscription")
-        plan_tier_value: Optional[str] = (data_obj.get("metadata") or {}).get("plan_tier")
+        plan_tier_value: Optional[str] = metadata.get("plan_tier")
 
         if not user_id:
-            logger.warning("checkout.session.completed: no client_reference_id — skipping")
+            logger.warning(
+                "Stripe webhook: no user mapping found in client_reference_id or metadata "
+                "| session_id=%s customer=%s — skipping",
+                data_obj.get("id"), stripe_customer_id,
+            )
             return {"received": True}
+
+        logger.info(
+            "Stripe webhook: mapped checkout session to user_id=%s | session_id=%s plan=%s",
+            user_id, data_obj.get("id"), plan_tier_value,
+        )
 
         # Update user row
         updates: Dict[str, Any] = {
@@ -505,7 +521,10 @@ async def stripe_webhook(
             details={"stripe_session_id": data_obj.get("id"), "stripe_customer_id": stripe_customer_id},
         ))
         await db.commit()
-        logger.info("checkout.session.completed processed | user_id=%s plan=%s", user_id, plan_tier_value)
+        logger.info(
+            "Stripe webhook: checkout.session.completed applied | user_id=%s plan=%s sub_id=%s",
+            user_id, plan_tier_value, stripe_sub_id,
+        )
 
     # ------------------------------------------------------------------
     # customer.subscription.updated
