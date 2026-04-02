@@ -25,6 +25,7 @@ from fastapi import Request
 
 from app.billing.plans import PLANS, PlanTier, get_plan
 from app.billing.stripe_helpers import (
+    _stripe_configured,
     create_checkout_session as _stripe_checkout,
     price_id_to_plan_tier,
     unix_to_datetime,
@@ -229,12 +230,16 @@ async def get_billing_summary(
         "next_plan": next_plan,
         "monetization_status": {
             "usage_metering_live": True,
-            "stripe_enabled": False,
+            "stripe_enabled": _stripe_configured(),
             "plan_assignment": "db",        # plan_tier stored on users table
             "note": (
                 "Plan tier is DB-backed (users.plan_tier). "
                 "Usage metering is in-memory (resets on restart). "
-                "Stripe billing is the next phase."
+                + (
+                    "Stripe billing is live (STRIPE_SECRET_KEY configured)."
+                    if _stripe_configured()
+                    else "Stripe billing is not yet configured (STRIPE_SECRET_KEY missing)."
+                )
             ),
         },
         "available_plans": [_plan_to_dict(p) for p in PLANS.values()],

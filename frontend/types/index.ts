@@ -202,10 +202,11 @@ export interface UsageCounter {
 }
 
 export interface MonetizationStatus {
-  usage_metering_live: boolean
+  usage_metering_live?: boolean
   stripe_enabled: boolean
-  plan_assignment: string
-  note: string
+  demo_mode?: boolean
+  plan_assignment?: string
+  note?: string
 }
 
 export interface BillingSubscription {

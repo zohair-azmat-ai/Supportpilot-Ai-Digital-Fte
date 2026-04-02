@@ -22,7 +22,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.billing.plans import PLANS, PlanTier, get_plan
-from app.billing.stripe_helpers import create_checkout_session as _stripe_checkout
+from app.billing.stripe_helpers import (
+    _stripe_configured,
+    create_checkout_session as _stripe_checkout,
+)
 from app.billing.usage_meter import usage_meter
 from app.core.deps import get_current_active_user, get_db
 
@@ -109,7 +112,10 @@ async def get_customer_billing_summary(
             "tickets": tickets_counter,
         },
         "next_plan": next_plan,
-        "monetization_status": {"stripe_enabled": False, "demo_mode": True},
+        "monetization_status": {
+            "stripe_enabled": _stripe_configured(),
+            "demo_mode": not _stripe_configured(),
+        },
         "available_plans": [_plan_to_dict(p) for p in PLANS.values()],
         "subscription": {
             "status": getattr(current_user, "subscription_status", "none") or "none",

@@ -300,7 +300,7 @@ export default function CustomerBillingPage() {
 
   if (!summary) return null
 
-  const { current_plan, current_plan_display, current_plan_detail, usage, available_plans, subscription } = summary
+  const { current_plan, current_plan_display, current_plan_detail, usage, available_plans, subscription, monetization_status } = summary
   const hasWarning = usage.messages.soft_warning || usage.tickets.soft_warning
   const hasBlock   = usage.messages.hard_blocked  || usage.tickets.hard_blocked
 
@@ -391,13 +391,23 @@ export default function CustomerBillingPage() {
             ) : (
               <p className="text-sm text-slate-500">No active billing period — Stripe not yet connected.</p>
             )}
-            <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/20 bg-amber-500/8 p-3">
-              <Info size={13} className="shrink-0 mt-0.5 text-amber-400" />
-              <p className="text-xs text-slate-400">
-                <span className="font-semibold text-amber-300">Coming soon — </span>
-                Live Stripe checkout, subscription management, and invoices will be available in the next phase.
-              </p>
-            </div>
+            {monetization_status?.stripe_enabled ? (
+              <div className="flex items-start gap-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/8 p-3">
+                <CheckCircle size={13} className="shrink-0 mt-0.5 text-emerald-400" />
+                <p className="text-xs text-slate-400">
+                  <span className="font-semibold text-emerald-300">Stripe billing active — </span>
+                  Subscriptions are managed via Stripe. Your plan and status update automatically after payment.
+                </p>
+              </div>
+            ) : (
+              <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/20 bg-amber-500/8 p-3">
+                <Info size={13} className="shrink-0 mt-0.5 text-amber-400" />
+                <p className="text-xs text-slate-400">
+                  <span className="font-semibold text-amber-300">Stripe not configured — </span>
+                  Live checkout is not yet available. Upgrade requests are logged but no payment will be taken.
+                </p>
+              </div>
+            )}
           </div>
         </Card>
       </div>
@@ -429,17 +439,21 @@ export default function CustomerBillingPage() {
         <div>
           <h2 className="text-lg font-semibold text-slate-100">Available Plans</h2>
           <p className="text-sm text-slate-500 mt-0.5">
-            Upgrade when ready. Clicking upgrade records your interest — Stripe checkout is the next phase.
+            {monetization_status?.stripe_enabled
+              ? 'Select a plan to begin secure Stripe checkout.'
+              : 'Stripe checkout requires configuration — upgrade requests are logged but no payment is taken.'}
           </p>
         </div>
 
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/8 px-4 py-3 flex items-center gap-3">
-          <Zap size={14} className="shrink-0 text-amber-400" />
-          <p className="text-xs text-slate-400">
-            <span className="font-semibold text-amber-300">Demo mode — </span>
-            No payment required during this phase. Upgrade buttons record your interest and will trigger real Stripe checkout once live.
-          </p>
-        </div>
+        {!monetization_status?.stripe_enabled && (
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/8 px-4 py-3 flex items-center gap-3">
+            <Zap size={14} className="shrink-0 text-amber-400" />
+            <p className="text-xs text-slate-400">
+              <span className="font-semibold text-amber-300">Fallback mode — </span>
+              Stripe is not yet configured. Upgrade requests are recorded but no charge will be made.
+            </p>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
           {available_plans.map((plan) => (

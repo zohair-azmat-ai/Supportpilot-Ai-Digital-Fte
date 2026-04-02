@@ -127,11 +127,13 @@ function UpgradeModal({
   onClose,
   onConfirm,
   loading,
+  stripeEnabled,
 }: {
   plan: BillingPlan
   onClose: () => void
   onConfirm: (tier: string) => void
   loading: boolean
+  stripeEnabled: boolean
 }) {
   const benefits = UPGRADE_BENEFITS[plan.tier] ?? plan.features
 
@@ -178,15 +180,25 @@ function UpgradeModal({
           ))}
         </div>
 
-        {/* Dev note */}
-        <div className="mx-6 mb-4 flex items-start gap-2.5 rounded-xl border border-amber-500/20 bg-amber-500/8 p-3">
-          <Info size={14} className="shrink-0 mt-0.5 text-amber-400" />
-          <p className="text-xs text-slate-400">
-            <span className="font-semibold text-indigo-300">Stripe checkout — </span>
-            You will be redirected to Stripe to complete payment. When Stripe credentials
-            are not configured, the request is logged and no charge is made.
-          </p>
-        </div>
+        {/* Config-aware note */}
+        {stripeEnabled ? (
+          <div className="mx-6 mb-4 flex items-start gap-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/8 p-3">
+            <Shield size={14} className="shrink-0 mt-0.5 text-emerald-400" />
+            <p className="text-xs text-slate-400">
+              <span className="font-semibold text-emerald-300">Secure checkout powered by Stripe — </span>
+              You will be redirected to Stripe to complete your subscription payment.
+            </p>
+          </div>
+        ) : (
+          <div className="mx-6 mb-4 flex items-start gap-2.5 rounded-xl border border-amber-500/20 bg-amber-500/8 p-3">
+            <Info size={14} className="shrink-0 mt-0.5 text-amber-400" />
+            <p className="text-xs text-slate-400">
+              <span className="font-semibold text-amber-300">Stripe not configured — </span>
+              This request will be logged but no payment will be taken.
+              Set <code className="text-slate-300">STRIPE_SECRET_KEY</code> to enable live checkout.
+            </p>
+          </div>
+        )}
 
         {/* Actions */}
         <div className="flex gap-3 px-6 pb-6">
@@ -538,6 +550,7 @@ export default function BillingPage() {
           onClose={() => setUpgradeTarget(null)}
           onConfirm={handleUpgradeConfirm}
           loading={upgrading}
+          stripeEnabled={!!monetization_status?.stripe_enabled}
         />
       )}
 
@@ -721,7 +734,9 @@ export default function BillingPage() {
         <div>
           <h2 className="text-lg font-semibold text-slate-100">Available Plans</h2>
           <p className="text-sm text-slate-500 mt-0.5">
-            Compare plans and upgrade when ready. Stripe billing integration is the next phase.
+            {monetization_status?.stripe_enabled
+              ? 'Select a plan to begin secure Stripe checkout.'
+              : 'Compare plans and upgrade when ready. Stripe checkout requires STRIPE_SECRET_KEY to be configured.'}
           </p>
         </div>
 
@@ -768,16 +783,28 @@ export default function BillingPage() {
                   Multi-agent routing — BillingAgent, TechnicalAgent, AccountAgent wired into live pipeline
                 </p>
               </div>
-              {/* Roadmap */}
-              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
-                <div className="flex items-center gap-2 mb-1.5">
-                  <AlertTriangle size={13} className="text-amber-400" />
-                  <span className="text-xs font-semibold text-amber-400">Next Phase</span>
+              {/* Stripe — config-aware */}
+              {monetization_status?.stripe_enabled ? (
+                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <CheckCircle size={13} className="text-emerald-400" />
+                    <span className="text-xs font-semibold text-emerald-400">Live</span>
+                  </div>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Stripe checkout active — real subscriptions, webhook lifecycle, and entitlement updates enabled
+                  </p>
                 </div>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Stripe checkout, subscription lifecycle, plan upgrades, webhook entitlement, DB-backed usage persistence
-                </p>
-              </div>
+              ) : (
+                <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <AlertTriangle size={13} className="text-amber-400" />
+                    <span className="text-xs font-semibold text-amber-400">Config Pending</span>
+                  </div>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Stripe checkout, subscription lifecycle, webhook entitlement — set <span className="text-slate-300">STRIPE_SECRET_KEY</span> to activate
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
